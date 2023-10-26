@@ -3,22 +3,23 @@
 # Ostrich for SACLA SFX data proprocessing
 # written by Takanori Nakane at Osaka University
 
-import dbpy
-import stpy
-
-import optparse
-import sys
 import h5py
+import sys
 from multiprocessing import set_start_method, freeze_support
 import numpy as np
 import re
 
+# SACLA APIs
+import dbpy
+import stpy
+
 from ostrich import VERSION
 from ostrich.dark_average import average_images
 from ostrich.geometry import *
+from ostrich.hitfinder import find_hits
 from ostrich.metadata import filter_mpccd_octal, is_exposed, get_photon_energies
 
-def run(runid, bl=3, clen=50.0):
+def run(runid, bl, clen, nproc):
     # Get Run info
     try:
         run_info = dbpy.read_runinfo(bl, runid)
@@ -40,6 +41,7 @@ def run(runid, bl=3, clen=50.0):
     # Find images for dark average
     exposed = is_exposed(high_tag, tags, bl, runid)
     calib_images = [tag for tag, exposed in zip(tags, exposed) if not exposed]
+    target_images = [tag for tag, exposed in zip(tags, exposed) if exposed]
 
     if np.sum(calib_images) == 0:
         RuntimeError("NoDarkImage")
@@ -78,39 +80,64 @@ def run(runid, bl=3, clen=50.0):
     # Write metadata
     write_metadata("%d.h5" % runid, det_infos, clen, comment, runid)
 
+    # DEBUG; move this below!
+    photon_energies_target = pulse_energies[exposed]
+    find_hits(bl, runid, det_infos, target_images, photon_energies_target, nproc, params)
+    return
+
     # Create dark average
     print("\nCalculating a dark average over %d images:\n" % len(calib_images))
     photon_energies_calib = pulse_energies[np.logical_not(exposed)]
-    averaged = average_images(readers, buffers, det_ids, bl, runid, calib_images, det_infos, photon_energies_calib, nproc=8)
+    averaged = average_images(readers, buffers, det_ids, bl, runid, calib_images, det_infos, photon_energies_calib, nproc)
 
     f = h5py.File("%d-dark.h5" % runid, "w")
     f.create_dataset("/data/data", data=averaged, compression="gzip", shuffle=True)
     f.close()
     print("Dark average was written to %s" % ("%d-dark.h5" % runid))
 
+phil_str = '''
+runid = 180693
+ .type = int(value_min = 0)
+
+bl = 2
+ .type = int(value_min = 2, value_max = 3)
+
+clen = 50.0
+ .type = float(value_min = 0)
+
+nproc = 8
+ .type = int(value_min = 1, value_max = 48)
+
+hit_threshold = 20
+ .type = int(value_min = 0)
+
+compression_level = 6
+ .type = int(value_min = 0, value_max = 9)
+
+output {
+    shoeboxes = False
+        .type = bool
+}
+
+include scope dials.algorithms.spot_finding.factory.phil_scope
+'''
+
 if __name__ == "__main__":
     freeze_support()
     set_start_method("spawn")
 
-    parser = optparse.OptionParser()
-    parser.add_option("--bl", dest="bl", type=int, default=3, help="Beamline")
-    parser.add_option("--clen", dest="clen", type=float, default=50.0, help="Camera distance")
-    opts, args = parser.parse_args()
+    # Importing these at the top makes spawning much slower
+    from dials.util.options import ArgumentParser
+    from libtbx.phil import parse
 
-    if (opts.bl != 2 and opts.bl !=3):
-        print("--bl must be 2 or 3.")
-        sys.exit(-1)
+    phil_scope = parse(phil_str, process_includes=True)
+    params, options = ArgumentParser(phil=phil_scope).parse_args(show_diff_phil=True, return_unhandled=False)
 
-    if len(args) != 1:
-        print("Usage: prepare-cheetah-sacla-api2.py runid [--bl 3] [--clen 50.0]")
-        sys.exit(-1)
-    runid = int(args[0])
-
-    print("prepare-cheetah-sacla-api2.py version %d" % VERSION)
+    print("Ostrich: SACLA Data Preprocessing System version %d" % VERSION)
     print(" by Takanori Nakane at Institute of Protein Research, Osaka University")
     print()
-    print("Option: bl               = %d" % opts.bl)
-    print("Option: clen             = %.1f mm" % opts.clen)
+    print("Option: bl               = %d" % params.bl)
+    print("Option: clen             = %.1f mm" % params.clen)
     print()
 
-    run(runid=runid, bl=opts.bl, clen=opts.clen)
+    run(runid=params.runid, bl=params.bl, clen=params.clen, nproc=params.nproc)
