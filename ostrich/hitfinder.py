@@ -16,22 +16,14 @@ from scitbx import matrix
 
 from ostrich.inmemory_dxtbx import FormatMPCCDInMemory
 
-def queue_based_worker(read_queue, result_queue, chunksize, bl, runid, det_infos, params):
-    try:
-        readers = [stpy.StorageReader(det_info['id'], bl, (runid,)) for det_info in det_infos]
-    except:
-        raise RuntimeError("FailedOn_create_streader")
-    try:
-        buffers = [stpy.StorageBuffer(reader) for reader in readers]
-    except:
-        raise RuntimeError("FailedOn_create_stbuf")
-
-    gains = [det_info['mp_absgain'] for det_info in det_infos]
+def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
+    detector.allocate_readers()
+    gains = [det_info['mp_absgain'] for det_info in detector.det_infos]
     hit_threshold = params.hit_threshold
 
-    xsize = det_infos[0]["xsize"]
-    ysize = det_infos[0]["ysize"]
-    npanels = len(det_infos)
+    xsize = detector.det_infos[0]["xsize"]
+    ysize = detector.det_infos[0]["ysize"]
+    npanels = len(detector.det_infos)
     cp, cy, cx = (npanels, ysize // chunksize[0], xsize // chunksize[1])
     compression_level = params.compression_level
 
@@ -42,7 +34,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, bl, runid, det_infos
             break
         tag, pulse_energy = task
 
-        for reader, buf in zip(readers, buffers):
+        for reader, buf in zip(detector.readers, detector.buffers):
             reader.collect(buf, tag)
 
         # ADU = N_photon * photon_energy / 3.65 / gain
@@ -51,13 +43,13 @@ def queue_based_worker(read_queue, result_queue, chunksize, bl, runid, det_infos
         # Thus, N_photon = ADU * 3.65 * gain / photon_energy.
         # We use the "0.1 photon" unit (i.e. DIALS's gain = 0.1 by definition)
         image_buf = [(buf.read_det_data(0) * (gain * 3.65 * 10 / pulse_energy)).astype(np.int32) \
-                     for gain, buf in zip(gains, buffers)]
+                     for gain, buf in zip(gains, detector.buffers)]
 
         if False: # skip DIALS
             print(tag)
             continue
 
-        image = FormatMPCCDInMemory(image_buf, det_infos, pulse_energy)
+        image = FormatMPCCDInMemory(image_buf, detector.det_infos, pulse_energy)
         imageset = ImageSet(ImageSetData(MemReader([image,]), None))
         imageset.set_beam(image.get_beam())
         imageset.set_detector(image.get_detector())
@@ -97,11 +89,11 @@ def queue_based_worker(read_queue, result_queue, chunksize, bl, runid, det_infos
 
         result_queue.put([tag, len(xyzobs), compressed_chunks])
 
-def find_hits(bl, runid, det_infos, tags, pulse_energies, nproc, params):
-    xsize = det_infos[0]["xsize"]
-    ysize = det_infos[0]["ysize"]
-    npanels = len(det_infos)
-    gains = [det_info['mp_absgain'] for det_info in det_infos]
+def find_hits(detector, tags, pulse_energies, nproc, params):
+    xsize = detector.det_infos[0]["xsize"]
+    ysize = detector.det_infos[0]["ysize"]
+    npanels = len(detector.det_infos)
+    gains = [det_info['mp_absgain'] for det_info in detector.det_infos]
 
     # Chunking parameters
     chunksize = (256, 256)
@@ -115,9 +107,10 @@ def find_hits(bl, runid, det_infos, tags, pulse_energies, nproc, params):
     workers = []
 
     # Create workers
+    detector.deallocate_readers()
     for i in range(nproc):
         p = Process(target=queue_based_worker, args=(read_queue, result_queue, \
-                      chunksize, bl, runid, det_infos, params))
+                      chunksize, detector, params))
         p.start()
         workers.append(p)
 

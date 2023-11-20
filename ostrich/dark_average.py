@@ -6,16 +6,12 @@ import numpy as np
 
 import stpy
 
-def add_image_par(read_queue, result_queue, bl, runid, det_ids, npanels, xsize, ysize, gains):
-    try:
-        readers = [stpy.StorageReader(det_id, bl, (runid,)) for det_id in det_ids]
-    except:
-        raise RuntimeError("FailedOn_create_streader")
-
-    try:
-        buffers = [stpy.StorageBuffer(reader) for reader in readers]
-    except:
-        raise RuntimeError("FailedOn_create_stbuf")
+def add_image_par(read_queue, result_queue, detector):
+    detector.allocate_readers()
+    xsize = detector.det_infos[0]["xsize"]
+    ysize = detector.det_infos[0]["ysize"]
+    npanels = len(detector.det_infos)
+    gains = [det_info['mp_absgain'] for det_info in detector.det_infos]
 
     local_buffer = np.zeros((ysize * npanels, xsize), dtype=np.float32)
     local_n_added = 0
@@ -29,8 +25,8 @@ def add_image_par(read_queue, result_queue, bl, runid, det_ids, npanels, xsize, 
             tag, energy = task
             try:
                 for i in range(npanels):
-                    readers[i].collect(buffers[i], tag)
-                    data = buffers[i].read_det_data(0)
+                    detector.readers[i].collect(detector.buffers[i], tag)
+                    data = detector.buffers[i].read_det_data(0)
                     data *= gains[i] * 3.65 / 0.1 / energy
                     local_buffer[(ysize * i):(ysize * (i + 1)),] += data
             except Exception as e:
@@ -38,24 +34,25 @@ def add_image_par(read_queue, result_queue, bl, runid, det_ids, npanels, xsize, 
                 continue # FIXME: report error
             local_n_added += 1
 
-def average_images(readers, buffers, det_ids, bl, runid, tags, det_infos, photon_energies, nproc=8):
-    xsize = det_infos[0]["xsize"]
-    ysize = det_infos[0]["ysize"]
-    npanels = len(det_infos)
-    gains = [det_info['mp_absgain'] for det_info in det_infos]
+def average_images(detector, tags, photon_energies, nproc=8):
+    xsize = detector.det_infos[0]["xsize"]
+    ysize = detector.det_infos[0]["ysize"]
+    npanels = len(detector.det_infos)
+    gains = [det_info['mp_absgain'] for det_info in detector.det_infos]
 
     n_added = 0
     sum_buffer = np.zeros((ysize * npanels, xsize), dtype=np.float32)
 
     if nproc == 1:
+        detector.allocte_readers()
         def add_image(tag, energy):
             for i in range(npanels):
                 try:
-                    readers[i].collect(buffers[i], tag)
+                    detector.readers[i].collect(detector.buffers[i], tag)
                 except:
                     raise RuntimeError("FailedOn_collect_data")
 
-                data = buffers[i].read_det_data(0)
+                data = detector.buffers[i].read_det_data(0)
                 data *= gains[i] * 3.65 / 0.1 / energy
                 sum_buffer[(ysize * i):(ysize * (i + 1)),] += data
 
@@ -71,9 +68,9 @@ def average_images(readers, buffers, det_ids, bl, runid, tags, det_infos, photon
         read_queue = Queue()
         result_queue = Queue()
         workers = []
+        detector.deallocate_readers()
         for i in range(nproc):
-            p = Process(target=add_image_par, args=(read_queue, result_queue, \
-                         bl, runid, det_ids, npanels, xsize, ysize, gains))
+            p = Process(target=add_image_par, args=(read_queue, result_queue, detector))
             p.start()
             workers.append(p)
         

@@ -3,6 +3,13 @@
 # Ostrich for SACLA SFX data proprocessing
 # written by Takanori Nakane at Osaka University
 
+# TODO:
+# - move this to command_line.py or something
+# - output file name
+# - target selection
+# - test NeXus output
+# - GUI integration
+
 import h5py
 import sys
 from multiprocessing import set_start_method, freeze_support
@@ -11,10 +18,10 @@ import re
 
 # SACLA APIs
 import dbpy
-import stpy
 
 from ostrich import VERSION
 from ostrich.dark_average import average_images
+from ostrich.detector import Detector
 from ostrich.geometry import *
 from ostrich.hitfinder import find_hits
 from ostrich.metadata import filter_mpccd_octal, is_exposed, get_photon_energies
@@ -47,25 +54,7 @@ def run(runid, bl, clen, nproc):
         RuntimeError("NoDarkImage")
 
     # Setup buffer readers
-    try:
-        readers = [stpy.StorageReader(det_id, bl, (runid,)) for det_id in det_ids]
-    except:
-        raise RuntimeError("FailedOn_create_streader")
-    try:
-        buffers = [stpy.StorageBuffer(reader) for reader in readers]
-    except:
-        raise RuntimeError("FailedOn_create_stbuf")
-
-    # Read the first image to get the detector info
-    # Store the detector name
-    for reader, buf in zip(readers, buffers):
-        try:
-            reader.collect(buf, calib_images[0])
-        except:
-            raise RuntiemError("FailedOn_collect_data")
-    det_infos = [buf.read_det_info(0) for buf in buffers]
-    for i, det_info in enumerate(det_infos):
-        det_info['id'] = det_ids[i]
+    detector = Detector(det_ids, bl, runid, calib_images[0])
 
     # Collect pulse energies
     pulse_energies, config_photon_energy = get_photon_energies(bl, runid, high_tag, tags)
@@ -74,26 +63,26 @@ def run(runid, bl, clen, nproc):
     print("Configured photon energy: %f eV\n" % config_photon_energy)
 
     # Create geometry files
-    write_crystfel_geom("%d.geom" % runid, det_infos, mean_energy, clen, runid)
-    write_cheetah_geom("%d-geom.h5" % runid, det_infos)
+    write_crystfel_geom("%d.geom" % runid, detector.det_infos, mean_energy, clen, runid)
+    # write_cheetah_geom("%d-geom.h5" % runid, detector.det_infos)
 
     # Write metadata
-    write_metadata("%d.h5" % runid, det_infos, clen, comment, runid)
-
-    # DEBUG; move this below!
-    photon_energies_target = pulse_energies[exposed]
-    find_hits(bl, runid, det_infos, target_images, photon_energies_target, nproc, params)
-    return
+    write_metadata("%d.h5" % runid, detector.det_infos, clen, comment, runid)
 
     # Create dark average
     print("\nCalculating a dark average over %d images:\n" % len(calib_images))
     photon_energies_calib = pulse_energies[np.logical_not(exposed)]
-    averaged = average_images(readers, buffers, det_ids, bl, runid, calib_images, det_infos, photon_energies_calib, nproc)
+    averaged = average_images(detector, calib_images, photon_energies_calib, nproc)
 
     f = h5py.File("%d-dark.h5" % runid, "w")
     f.create_dataset("/data/data", data=averaged, compression="gzip", shuffle=True)
     f.close()
     print("Dark average was written to %s" % ("%d-dark.h5" % runid))
+
+    # DEBUG; move this below!
+    photon_energies_target = pulse_energies[exposed]
+    find_hits(detector, target_images, photon_energies_target, nproc, params)
+    return
 
 phil_str = '''
 runid = 180693
@@ -123,6 +112,9 @@ include scope dials.algorithms.spot_finding.factory.phil_scope
 '''
 
 if __name__ == "__main__":
+    # Very annoyingly, stpy is not compatible with fork.
+    # Internally, it never releases sockets to MySQL DAQ DB.
+    # BufferReaders shares file handles.
     freeze_support()
     set_start_method("spawn")
 
