@@ -89,7 +89,9 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
 
         result_queue.put([tag, len(xyzobs), compressed_chunks])
 
-def find_hits(detector, tags, pulse_energies, nproc, params):
+def find_hits(detector, tags, pulse_energies, output_filename, params):
+    nproc = params.nproc
+
     xsize = detector.det_infos[0]["xsize"]
     ysize = detector.det_infos[0]["ysize"]
     npanels = len(detector.det_infos)
@@ -122,7 +124,7 @@ def find_hits(detector, tags, pulse_energies, nproc, params):
     n_finished = 0
     n_hit = 0
     n_processed = 0
-    h5out = h5py.File("test.h5", "w")
+    h5out = h5py.File(output_filename, "a")
     while n_finished < nproc:
         task = result_queue.get()
         if task is None:

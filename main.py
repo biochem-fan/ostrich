@@ -5,8 +5,6 @@
 
 # TODO:
 # - move this to command_line.py or something
-# - output file name
-# - target selection
 # - help message
 # - test NeXus output
 # - GUI integration
@@ -128,7 +126,8 @@ def run(params):
     # write_cheetah_geom("%d-geom.h5" % runid, detector.det_infos)
 
     # Write metadata
-    write_metadata("%d.h5" % runid, detector.det_infos, clen, comment, runid)
+    output_filename = "run%d-%s.h5" % (runid, params.runtype)
+    write_metadata(output_filename, detector.det_infos, clen, comment, runid)
 
     # Create dark average
     print("\nCalculating a dark average over %d images:\n" % len(calib_images))
@@ -146,7 +145,7 @@ def run(params):
     target_images = [tag for tag, flag in zip(tags, right_type) if flag]
     print("%d images will be processed in this job out of %d exposed images" % (len(target_images), len(exposed_images)))
     photon_energies_target = pulse_energies[exposed][right_type]
-    find_hits(detector, target_images, photon_energies_target, nproc, params)
+    find_hits(detector, target_images, photon_energies_target, output_filename, params)
 
 phil_str = '''
 bl = 2
