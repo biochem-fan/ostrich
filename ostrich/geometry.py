@@ -11,25 +11,14 @@ import re
 
 from ostrich import VERSION
 
-def validate_mpccd_geometry(det_infos):
-    xsize = det_infos[0]["xsize"]
-    ysize = det_infos[0]["ysize"]
-
-    # At the moment we assume all panels have the same shape
-    for det_info in det_infos:
-        assert xsize == det_info["xsize"]
-        assert ysize == det_info["ysize"]
-
-def write_crystfel_geom(filename, det_infos, energy, clen, runid):
-    validate_mpccd_geometry(det_infos)
-    xsize = det_infos[0]["xsize"]
-    ysize = det_infos[0]["ysize"]
-    npanels = len(det_infos)
+def write_crystfel_geom(filename, geometry, energy, clen, runid):
+    xsize = geometry.width
+    ysize = geometry.height
+    npanels = len(geometry.panels)
 
     with open(filename, "w") as out:
         out.write("; CrystFEL geometry file produced by Ostrich version %d\n" % VERSION)
         out.write(";   Takanori Nakane (tnakane.protein@osaka-u.ac.jp)\n")
-        out.write("; Detector ID: %s\n" % det_infos[0]['id'])
         out.write("; for tiled but NOT reassembled images (512x8192 pixels)\n\n")
         out.write("clen = %.4f               ; %.1f mm camera length. You SHOULD optimize this!\n" % (clen * 1E-3, clen))
         out.write("res = 20000                 ; = 1 m /50 micron\n")
@@ -53,14 +42,14 @@ def write_crystfel_geom(filename, det_infos, energy, clen, runid):
         out.write("rigid_group_collection_independent = q1,q2,q3,q4,q5,q6,q7,q8\n\n")
 
         out.write("; Panel definitions\n")
-        for i, det_info in enumerate(det_infos):
-            name = det_info['id']
-            gain = det_info['mp_absgain']
-            detx = det_info['mp_posx']
-            dety = det_info['mp_posy']
-            detz = det_info['mp_posz']
-            rotation = det_info['mp_rotationangle'] * (math.pi / 180.0) # rad
-            pixel_size = det_info['mp_pixelsizex']
+        for i, panel in enumerate(geometry.panels):
+            name = panel['id']
+            gain = panel['gain']
+            detx = panel['pos_x']
+            dety = panel['pos_y']
+            detz = panel['pos_z']
+            rotation = panel['rotation'] * (math.pi / 180.0) # rad
+            pixel_size = geometry.pixel_size
             print("panel %s gain %f pos (%f, %f, %f) rotation %f energy %f" % (name, gain, detx, dety, detz, rotation, energy))
 
             detx /= pixel_size; dety /= pixel_size;
@@ -74,13 +63,12 @@ def write_crystfel_geom(filename, det_infos, energy, clen, runid):
             out.write("q%d/min_ss = %d\n" % (det_id, i * ysize))
             out.write("q%d/max_fs = %d\n" % (det_id, xsize - 1))
             out.write("q%d/max_ss = %d\n" % (det_id, (i + 1) * ysize - 1))
-            # TODO: CHECK ME; we need MINUS signs before two cosines?
-            out.write("q%d/fs = %fx %+fy\n" % (det_id, math.cos(rotation), math.sin(rotation)))
-            out.write("q%d/ss = %fx %+fy\n" % (det_id, -math.sin(rotation), math.cos(rotation)))
+            out.write("q%d/fs = %fx %+fy\n" % (det_id, -math.cos(rotation), math.sin(rotation)))
+            out.write("q%d/ss = %fx %+fy\n" % (det_id, -math.sin(rotation), -math.cos(rotation)))
             out.write("q%d/corner_x = %f\n" % (det_id, -detx))
             out.write("q%d/corner_y = %f\n\n" % (det_id, dety))
 
-        border, outer_border = get_border(det_infos[0]['id'])
+        border, outer_border = get_border(geometry.panels[0]['id'])
         if border != 0:
             out.write("; Bad regions near edges of each sensor.\n")
             out.write(";  l: long axis, s: short axis\n")
@@ -116,7 +104,7 @@ def write_crystfel_geom(filename, det_infos, energy, clen, runid):
                 out.write("badq%ds2/max_ss = %d\n"    % (i + 1, ysize * (i + 1) - 1))
                 out.write("badq%ds2/panel  = q%d\n\n" % (i + 1, i + 1))
 
-        if re.match("MPCCD-8B0-2-003", det_infos[0]['id']):
+        if re.match("MPCCD-8B0-2-003", geometry.panels[0]['id']):
             out.write("; Severly damaged Phase 3 detector\n")
             out.write("baddamage1/min_fs = 501\n")
             out.write("baddamage1/max_fs = 511\n")
@@ -156,23 +144,22 @@ def write_crystfel_geom(filename, det_infos, energy, clen, runid):
                 out.write("badport7/max_ss = 7167\n")
                 out.write("badport7/panel  = q7\n\n")
 
-def write_cheetah_geom(filename, det_infos):
-    validate_mpccd_geometry(det_infos)
-    xsize = det_infos[0]["xsize"]
-    ysize = det_infos[0]["ysize"]
+def write_cheetah_geom(filename, geometry):
+    xsize = geometry.width
+    ysize = geometry.height
 
-    npanels = len(det_infos)
+    npanels = len(geometry.panels)
     posx = np.zeros((ysize * npanels, xsize), dtype=np.float32)
     posy = posx.copy()
     posz = posx.copy()
 
-    for i, det_info in enumerate(det_infos):
-        gain = det_info['mp_absgain']
-        detx = det_info['mp_posx'] * 1E-6 # m
-        dety = det_info['mp_posy'] * 1E-6
-        detz = det_info['mp_posz'] * 1E-6
-        rotation = det_info['mp_rotationangle'] * (math.pi / 180.0) # rad
-        pixel_size = det_info['mp_pixelsizex'] * 1E-6 # m
+    for i, panel in enumerate(geometry.panels):
+        gain = panel['gain']
+        detx = panel['pos_x'] * 1E-6 # m
+        dety = panel['pos_y'] * 1E-6
+        detz = panel['pos_z'] * 1E-6
+        rotation = panel['rotation'] * (math.pi / 180.0) # rad
+        pixel_size = geometry.pixel_size * 1E-6 # m
         
         fast_x = math.cos(rotation) * pixel_size
         fast_y = math.sin(rotation) * pixel_size;
@@ -208,13 +195,12 @@ def get_border(det_name):
     else:
         return (0, 0)
 
-def make_pixelmask(det_infos, runid):
-    validate_mpccd_geometry(det_infos)
-    xsize = det_infos[0]["xsize"]
-    ysize = det_infos[0]["ysize"]
-    npanels = len(det_infos)
+def make_pixelmask(geometry, runid):
+    xsize = geometry.width
+    ysize = geometry.height
+    npanels = len(geometry.panels)
 
-    det_name = det_infos[0]["id"]
+    det_name = geometry.panels[0]["id"]
     border, outer_border = get_border(det_name)
 
     mask = np.zeros((ysize * npanels, xsize), dtype=np.uint16)
@@ -237,19 +223,19 @@ def make_pixelmask(det_infos, runid):
 
     return mask
 
-def write_metadata(filename, det_infos, clen, comment, runid):
+def write_metadata(filename, geometry, clen, comment, runid):
     f = h5py.File(filename, "w")
     
     f["/metadata/pipeline_version"] = VERSION
     f["/metadata/run_comment"] = comment
-    f["/metadata/sensor_id"] = [det_info['id'] for det_info in det_infos]
-    f["/metadata/posx_in_um"] = [det_info['mp_posx'] for det_info in det_infos]
-    f["/metadata/posy_in_um"] = [det_info['mp_posy'] for det_info in det_infos]
-    f["/metadata/posz_in_um"] = [det_info['mp_posz'] for det_info in det_infos]
-    f["/metadata/angle_in_rad"] = [det_info['mp_rotationangle'] for det_info in det_infos]
-    f["/metadata/pixelsizex_in_um"] = [det_info['mp_pixelsizex'] for det_info in det_infos]
-    f["/metadata/pixelsizey_in_um"] = [det_info['mp_pixelsizey'] for det_info in det_infos]
+    f["/metadata/sensor_id"] = [panel['id'] for panel in geometry.panels]
+    f["/metadata/posx_in_um"] = [panel['pos_x'] for panel in geometry.panels]
+    f["/metadata/posy_in_um"] = [panel['pos_y'] for panel in geometry.panels]
+    f["/metadata/posz_in_um"] = [panel['pos_z'] for panel in geometry.panels]
+    f["/metadata/angle_in_rad"] = [panel['rotation'] for panel in geometry.panels]
+    f["/metadata/pixelsizex_in_um"] = [geometry.pixel_size] * len(geometry.panels)
+    f["/metadata/pixelsizey_in_um"] = [geometry.pixel_size] * len(geometry.panels)
     f["/metadata/distance_in_mm"] = clen
-    pixel_mask = make_pixelmask(det_infos, runid)
+    pixel_mask = make_pixelmask(geometry, runid)
     f.create_dataset("/metadata/pixelmask", data=pixel_mask, compression="gzip", shuffle=True)
     f.close()

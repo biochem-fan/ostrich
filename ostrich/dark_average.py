@@ -8,10 +8,11 @@ import stpy
 
 def add_image_par(read_queue, result_queue, detector):
     detector.allocate_readers()
-    xsize = detector.det_infos[0]["xsize"]
-    ysize = detector.det_infos[0]["ysize"]
-    npanels = len(detector.det_infos)
-    gains = [det_info['mp_absgain'] for det_info in detector.det_infos]
+
+    xsize = detector.geometry.width
+    ysize = detector.geometry.height
+    npanels = len(detector.geometry.panels)
+    gains = [panel['gain'] for panel in detector.geometry.panels]
 
     local_buffer = np.zeros((ysize * npanels, xsize), dtype=np.float32)
     local_n_added = 0
@@ -35,10 +36,10 @@ def add_image_par(read_queue, result_queue, detector):
             local_n_added += 1
 
 def average_images(detector, tags, photon_energies, nproc=8):
-    xsize = detector.det_infos[0]["xsize"]
-    ysize = detector.det_infos[0]["ysize"]
-    npanels = len(detector.det_infos)
-    gains = [det_info['mp_absgain'] for det_info in detector.det_infos]
+    xsize = detector.geometry.width
+    ysize = detector.geometry.height
+    npanels = len(detector.geometry.panels)
+    gains = [panel['gain'] for panel in detector.geometry.panels]
 
     n_added = 0
     sum_buffer = np.zeros((ysize * npanels, xsize), dtype=np.float32)

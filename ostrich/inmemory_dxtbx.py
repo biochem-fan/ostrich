@@ -14,22 +14,19 @@ from dxtbx.format.FormatStill import FormatStill
 from scitbx import matrix
 
 class FormatMPCCDInMemory(FormatStill):
-    THICKNESS = 0.050 # mm
-
-    def __init__(self, buffers, det_infos, energy, distance=50.0):
-        assert len(buffers) == 8
-        assert len(det_infos) == 8
+    def __init__(self, buffers, geometry, energy, distance=50.0):
+        assert len(buffers) == len(geometry.panels)
 
         self._image = tuple(flex.int(buf.astype(np.int32)) for buf in buffers)
         self._beam = BeamFactory.simple(factor_ev_angstrom / energy) 
-        self.setup_detector(det_infos, distance)
+        self.setup_detector(geometry, distance)
 
-    def setup_detector(self, det_infos, distance):
+    def setup_detector(self, geometry, distance):
         wavelength = self.get_beam().get_wavelength()
 
         table = attenuation_coefficient.get_table("Si")
         mu = table.mu_at_angstrom(wavelength) / 10.0
-        px_mm = ParallaxCorrectedPxMmStrategy(mu, self.THICKNESS)
+        px_mm = ParallaxCorrectedPxMmStrategy(mu, geometry.thickness)
 
         detector = Detector()
         root = detector.hierarchy()
@@ -37,22 +34,22 @@ class FormatMPCCDInMemory(FormatStill):
                        ( 0, 1, 0),
                        ( 0, 0, distance))
 
-        for i, det_info in enumerate(det_infos):
-            angle = det_info['mp_rotationangle'] * math.pi / 180.0
+        for i, panel in enumerate(geometry.panels):
+            angle = panel['rotation'] * math.pi / 180.0
             fast = matrix.col((math.cos(angle), math.sin(angle), 0))
             slow = matrix.col((-math.sin(angle), math.cos(angle), 0))
             normal = fast.cross(slow)
 
-            origin = matrix.col((-det_info['mp_posx'],
-                                  det_info['mp_posy'],
-                                  det_info['mp_posz'])) / 1000.0
+            origin = matrix.col((-panel['pos_x'],
+                                  panel['pos_y'],
+                                  panel['pos_z'])) / 1000.0
             p = root.add_panel()
             p.set_type("SENSOR_PAD")
             p.set_name('Panel%d' % i)
-            p.set_image_size((det_info['xsize'], det_info['ysize']))
+            p.set_image_size((geometry.width, geometry.height))
             p.set_trusted_range((-1, 65535))
-            p.set_pixel_size((det_info['mp_pixelsizex'], det_info['mp_pixelsizey']))
-            p.set_thickness(self.THICKNESS)
+            p.set_pixel_size((geometry.pixel_size, geometry.pixel_size))
+            p.set_thickness(geometry.thickness)
             p.set_local_frame(fast.elems, slow.elems, origin.elems)
             p.set_px_mm_strategy(px_mm)
             p.set_gain(10)

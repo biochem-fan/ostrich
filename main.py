@@ -122,12 +122,12 @@ def run(params):
     print("Configured photon energy: %f eV\n" % config_photon_energy)
 
     # Create geometry files
-    write_crystfel_geom("%d.geom" % runid, detector.det_infos, mean_energy, clen, runid)
-    # write_cheetah_geom("%d-geom.h5" % runid, detector.det_infos)
+    write_crystfel_geom("%d.geom" % runid, detector.geometry, mean_energy, clen, runid)
+    # write_cheetah_geom("%d-geom.h5" % runid, detector.geometry)
 
     # Write metadata
     output_filename = "run%d-%s.h5" % (runid, params.runtype)
-    write_metadata(output_filename, detector.det_infos, clen, comment, runid)
+    write_metadata(output_filename, detector.geometry, clen, comment, runid)
 
     # Create dark average
     print("\nCalculating a dark average over %d images:\n" % len(calib_images))

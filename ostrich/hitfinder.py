@@ -18,12 +18,12 @@ from ostrich.inmemory_dxtbx import FormatMPCCDInMemory
 
 def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
     detector.allocate_readers()
-    gains = [det_info['mp_absgain'] for det_info in detector.det_infos]
     hit_threshold = params.hit_threshold
 
-    xsize = detector.det_infos[0]["xsize"]
-    ysize = detector.det_infos[0]["ysize"]
-    npanels = len(detector.det_infos)
+    gains = [panel['gain'] for panel in detector.geometry.panels]
+    xsize = detector.geometry.width
+    ysize = detector.geometry.height
+    npanels = len(detector.geometry.panels)
     cp, cy, cx = (npanels, ysize // chunksize[0], xsize // chunksize[1])
     compression_level = params.compression_level
 
@@ -49,7 +49,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
             print(tag)
             continue
 
-        image = FormatMPCCDInMemory(image_buf, detector.det_infos, pulse_energy)
+        image = FormatMPCCDInMemory(image_buf, detector.geometry, pulse_energy)
         imageset = ImageSet(ImageSetData(MemReader([image,]), None))
         imageset.set_beam(image.get_beam())
         imageset.set_detector(image.get_detector())
@@ -91,11 +91,12 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
 
 def find_hits(detector, tags, pulse_energies, output_filename, params):
     nproc = params.nproc
+    hit_threshold = params.hit_threshold
 
-    xsize = detector.det_infos[0]["xsize"]
-    ysize = detector.det_infos[0]["ysize"]
-    npanels = len(detector.det_infos)
-    gains = [det_info['mp_absgain'] for det_info in detector.det_infos]
+    gains = [panel['gain'] for panel in detector.geometry.panels]
+    xsize = detector.geometry.width
+    ysize = detector.geometry.height
+    npanels = len(detector.geometry.panels)
 
     # Chunking parameters
     chunksize = (256, 256)
