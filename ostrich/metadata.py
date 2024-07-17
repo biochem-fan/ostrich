@@ -15,6 +15,9 @@ def str2float(str):
     else:
         return None
 
+def syncdata2float(sensor, high_tag, tags):
+    return [str2float(s) for s in dbpy.read_syncdatalist(sensor, high_tag, tags)]
+
 def filter_mpccd_octal(det_ids):
     mpccds = sorted([x for x in det_ids if re.match("^MPCCD-8.*-[1-8]$", x)])
     if len(mpccds) != 8:
@@ -41,11 +44,11 @@ def is_exposed(high_tag, tags, bl, runid):
         #  If the detector alarm triggered shutter closure, these values can still be nonsense.
         #  This is why we look at "only tags at the beginning of a run" to avoid false positives.
         try:
-            shutter_open = [str2float(s) for s in dbpy.read_syncdatalist(sensor_shutter_open, high_tag, tags)]
+            shutter_open = syncdata2float(sensor_shutter_open, high_tag, tags)
         except:
             raise RuntimeError("NoShutterOpenStatus")
         try:
-            shutter_close = [str2float(s) for s in dbpy.read_syncdatalist(sensor_shutter_close, high_tag, tags)]
+            shutter_close = syncdata2float(sensor_shutter_close, high_tag, tags)
         except:
             raise RuntimeError("NoShutterClosedStatus")
 
@@ -64,7 +67,7 @@ def is_exposed(high_tag, tags, bl, runid):
         print("so we use X-ray PD values instead.")
         xray_pd = "xfel_bl_2_st_3_bm_1_pd/charge"
         xray_pd_thresh = 1e-10
-        pd_values = [str2float(s) for s in dbpy.read_syncdatalist(xray_pd, high_tag, tag_list)]
+        pd_values = syncdata2float(xray_pd, high_tag, tag_list)
 
         exposed = [True] * len(tags)
         for idx, pd in enumerate(pd_values):
@@ -75,7 +78,7 @@ def is_exposed(high_tag, tags, bl, runid):
     else:
         # The oldest strategy: only using the open status because the close status was unreliable at the time.
         try:
-            shutter_open = [str2float(s) for s in dbpy.read_syncdatalist(sensor_shutter_open, high_tag, tags)]
+            shutter_open = syncdata2float(sensor_shutter_open, high_tag, tags)
         except:
             raise RuntimeError("NoShutterOpenStatus")
 
@@ -99,7 +102,7 @@ def get_photon_energies(bl, runid, high_tag, tags):
         print("         This is not problematic unless the inline spectrometer is also broken.")
         config_photon_energy_sensible = False
 
-    pulse_energies_in_keV  = [str2float(s) for s in dbpy.read_syncdatalist(sensor_spec, high_tag, tuple(tags))]
+    pulse_energies_in_keV  = syncdata2float(sensor_spec, high_tag, tuple(tags))
     pulse_energies = []
     for tag, energy in zip(tags, pulse_energies_in_keV):
         if energy is not None and energy > 0:

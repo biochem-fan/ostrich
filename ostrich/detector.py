@@ -36,6 +36,7 @@ class Detector:
                 reader.collect(buf, self.first_tag)
             except:
                 raise RuntiemError("FailedOn_collect_data")
+        # TODO: assert 'mp_manipulator_shift' are all 0 (i.e. the direct beam aperture is closed).
 
         # Store the detector name
         self.det_infos = [buf.read_det_info(0) for buf in self.buffers]

@@ -66,7 +66,7 @@ def write_crystfel_geom(filename, det_infos, energy, clen, runid):
             detx /= pixel_size; dety /= pixel_size;
             det_id = i + 1
 
-            # Nphotons = S [ADU] * G [e-/ADU] / (E [eV] * 3.65 [eV/e-]) according to the manual.
+            # Nphotons = S [ADU] * G [e-/ADU] / (E [eV] / 3.65 [eV/e-]) according to the manual.
             # Thus, ADU/eV = 1/(3.65*G)
             out.write("; sensor %s\n" % name)
             out.write("q%d/adu_per_eV = %f\n" % (det_id, 1.0 / (0.1 * energy))) # Keitaro's 0.1 photon
@@ -74,6 +74,7 @@ def write_crystfel_geom(filename, det_infos, energy, clen, runid):
             out.write("q%d/min_ss = %d\n" % (det_id, i * ysize))
             out.write("q%d/max_fs = %d\n" % (det_id, xsize - 1))
             out.write("q%d/max_ss = %d\n" % (det_id, (i + 1) * ysize - 1))
+            # TODO: CHECK ME; we need MINUS signs before two cosines?
             out.write("q%d/fs = %fx %+fy\n" % (det_id, math.cos(rotation), math.sin(rotation)))
             out.write("q%d/ss = %fx %+fy\n" % (det_id, -math.sin(rotation), math.cos(rotation)))
             out.write("q%d/corner_x = %f\n" % (det_id, -detx))
