@@ -231,7 +231,9 @@ def write_metadata(filename, geometry, clen, comment, runid):
     f["/metadata/posx_in_um"] = [panel.pos_x for panel in geometry.panels]
     f["/metadata/posy_in_um"] = [panel.pos_y for panel in geometry.panels]
     f["/metadata/posz_in_um"] = [panel.pos_z for panel in geometry.panels]
-    f["/metadata/angle_in_rad"] = [panel.rotation for panel in geometry.panels]
+    # Although this field name is angles_in_RAD, the dxtbx class interprets it as degrees...
+    # For compatibility, we keep it as is.
+    f["/metadata/angle_in_rad"] = [panel.rotation * (180.0 / math.pi) for panel in geometry.panels]
     f["/metadata/pixelsizex_in_um"] = [geometry.pixel_size] * len(geometry.panels)
     f["/metadata/pixelsizey_in_um"] = [geometry.pixel_size] * len(geometry.panels)
     f["/metadata/distance_in_mm"] = clen
