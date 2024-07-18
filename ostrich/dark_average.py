@@ -45,7 +45,7 @@ def average_images(detector, tags, photon_energies, nproc=8):
     sum_buffer = np.zeros((ysize * npanels, xsize), dtype=np.float32)
 
     if nproc == 1:
-        detector.allocte_readers()
+        detector.allocate_readers()
         def add_image(tag, energy):
             for i in range(npanels):
                 try:

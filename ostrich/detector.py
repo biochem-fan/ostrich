@@ -23,6 +23,7 @@ class DetectorGeometry:
         self.height = 0 # slow scan
         self.thickness = 0 # um
         self.panels = []
+        self.groups = [] # array of (group_name, [panel_name])
 
 class Detector:
     def __init__(self, det_ids, bl, runid, first_tag):
@@ -87,6 +88,20 @@ class CITIUSDetector(Detector):
             panel.gain = 1.0 # already normalized to the number of electrons by API
             self.geometry.panels.append(panel)
 
+        # Analyze 2 x 4 SSS (Sensor Sub System) blocks, each containing 3x3 panels
+        self.geometry.groups = []
+        for y in [0, 3, 6, 9]:
+            for x in [0, 3]:
+                prb_in_sss = []
+                for dy in range(3):
+                    for dx in range(3):
+                        prb = x + dx + (y + dy) * 6
+                        if prb in self.det_ids:
+                            prb_in_sss.append("prb%02d" % prb)
+
+                if len(prb_in_sss) > 0:
+                    self.geometry.groups.append(("sss%d%d" % (x, y), prb_in_sss))
+    
     def read_detinfos(self):
         det_infos = [self.buffers.read_reconstinfo(prb_id, self.first_tag) for prb_id in self.det_ids]
         for det_info, prb_id in zip(det_infos, self.det_ids):
@@ -126,7 +141,7 @@ class MPCCDDetector(Detector):
         self.geometry.pixel_size = det_infos[0]["mp_pixelsizex"]
 
         self.geometry.thickness = 300 # um for Phase III (was 50 um for Phase I)
-        # CITIUS had 650 um
+        self.geometry.groups = []
 
         for i, det_info in enumerate(det_infos):
             # All panels must be the same shape
@@ -148,7 +163,8 @@ class MPCCDDetector(Detector):
             panel.rotation = det_info['mp_rotationangle'] * pi / 180.0
             panel.gain = det_info['mp_absgain']
             self.geometry.panels.append(panel)
-
+            self.geometry.groups.append(("group%d" % (i + 1), [panel.name]))
+        
     def read_detinfos(self):
         for reader, buf in zip(self.readers, self.buffers):
             try:

@@ -141,6 +141,7 @@ def run(params):
     # Write metadata
     output_filename = "run%d-%s.h5" % (runid, params.runtype)
     write_metadata(output_filename, detector.geometry, clen, comment, runid)
+    print()
 
     # Create dark average
     if not is_citius:

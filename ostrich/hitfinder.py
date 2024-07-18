@@ -70,7 +70,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
         xyzobs = observed['xyzobs.px.value']
         # print(tag, len(xyzobs))
         if len(xyzobs) < hit_threshold:
-            result_queue.put([tag, len(xyzobs), None])
+            result_queue.put([tag, len(xyzobs), pulse_energy, None])
             continue
 
         # shuffle and compress in workers (see my PR https://github.com/keitaroyam/cheetah/pull/1)
@@ -80,7 +80,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
             # TODO: change type for CITIUS
             image_buf[ip].clip(0, np.iinfo(np.uint16).max, out=image_buf[ip])
             uint16buf = image_buf[ip].astype(np.uint16)
-            byteview = uint16buf.view(dtype=np.uint8)
+            byteview = uint16buf.view(dtype=np.uint8) # ONLY the length of the fast axis changes
             itemsize = uint16buf.dtype.itemsize
 
             for iy in range(cy):
@@ -90,12 +90,12 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
                     ey = sy + chunksize[0]
                     ex = sx + chunksize[1]
 
-                    chunk = byteview[sy:ey, (sx * itemsize):(ey * itemsize)]
+                    chunk = byteview[sy:ey, (sx * itemsize):(ex * itemsize)]
                     shuffled = chunk.reshape((-1, itemsize)).transpose().reshape(-1)
                     compressed_chunks[chunkidx] = zlib.compress(shuffled.tobytes(), compression_level)
                     chunkidx += 1
 
-        result_queue.put([tag, len(xyzobs), compressed_chunks])
+        result_queue.put([tag, len(xyzobs), pulse_energy, compressed_chunks])
 
 def find_hits(detector, tags, pulse_energies, output_filename, params):
     nproc = params.nproc
@@ -130,8 +130,11 @@ def find_hits(detector, tags, pulse_energies, output_filename, params):
         workers.append(p)
 
     # Send tasks
+    i = 0
     for tag, pulse_energy in zip(tags, pulse_energies):
         read_queue.put([tag, pulse_energy])
+        i += 1
+        if i > 200: break
     for i in range(nproc): read_queue.put(None)
 
     n_finished = 0
@@ -144,12 +147,14 @@ def find_hits(detector, tags, pulse_energies, output_filename, params):
             n_finished += 1
             continue
 
-        tag, n_spots, image = task
+        tag, n_spots, pulse_energy, image = task
         n_processed += 1
 
         if image is not None:
-            d = h5out.create_dataset("tag-%d" % tag, (npanels * ysize, xsize), chunks=chunksize,
-                                     compression="gzip", compression_opts=compression_level, shuffle=True, dtype=np.uint16)
+            g = h5out.create_group("tag-%d" % tag)
+            g.create_dataset("photon_energy_ev", data=pulse_energy)
+            d = g.create_dataset("data", (npanels * ysize, xsize), chunks=chunksize,
+                                 compression="gzip", compression_opts=compression_level, shuffle=True, dtype=np.uint16)
             chunkidx = 0
             for ip in range(cp):
                 for iy in range(cy):

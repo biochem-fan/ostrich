@@ -20,26 +20,26 @@ def write_crystfel_geom(filename, geometry, energy, clen, runid):
         out.write("; CrystFEL geometry file produced by Ostrich version %d\n" % VERSION)
         out.write(";   Takanori Nakane (tnakane.protein@osaka-u.ac.jp)\n")
         # out.write("; for tiled but NOT reassembled images (512x8192 pixels)\n\n")
-        out.write("clen = %.4f               ; %.1f mm camera length. You SHOULD optimize this!\n" % (clen * 1E-3, clen))
-        out.write("res = 20000                 ; = 1 m /50 micron\n")
+        out.write("clen = %.4f    ; %.1f mm camera length. You SHOULD optimize this!\n" % (clen * 1E-3, clen))
+        out.write("res = %.1f     ; = 1 m / %.4f micron\n" % (1E6 / geometry.pixel_size, geometry.pixel_size))
         out.write("data = /%/data\n")
         # TODO: CrystFEL mask
         out.write(";mask = /metadata/pixelmask ; this does not work in CrystFEL 0.6.2 (reported bug)\n")
         out.write(";mask_good = 0x00            ; instead, we can specify bad regions below if necessary\n")
         out.write(";mask_bad = 0xFF\n")
-        out.write("photon_energy = /%%/photon_energy_ev ; roughly %.1f eV\n\n" % energy)
-        out.write("; Definitions for geoptimiser\n")
-        # TODO: detector grouping
-        out.write("rigid_group_q1 = q1\n")
-        out.write("rigid_group_q2 = q2\n")
-        out.write("rigid_group_q3 = q3\n")
-        out.write("rigid_group_q4 = q4\n")
-        out.write("rigid_group_q5 = q5\n")
-        out.write("rigid_group_q6 = q6\n")
-        out.write("rigid_group_q7 = q7\n")
-        out.write("rigid_group_q8 = q8\n\n")
-        out.write("rigid_group_collection_connected = q1,q2,q3,q4,q5,q6,q7,q8\n")
-        out.write("rigid_group_collection_independent = q1,q2,q3,q4,q5,q6,q7,q8\n\n")
+        out.write("photon_energy = /%%/photon_energy_ev ; roughly %.1f eV\n" % energy)
+        out.write("\n")
+
+        out.write("; Group definitions for geoptimiser\n")
+        for panel in geometry.panels:
+            out.write("rigid_group_%s = %s\n" % (panel.name, panel.name))
+        out.write("rigid_group_collection_independent = " + \
+                  ",".join([panel.name for panel in geometry.panels]) + "\n")
+
+        for (group_name, members) in geometry.groups:
+            out.write("rigid_group_%s = " % group_name + ",".join([panel_name for panel_name in members]) + "\n")
+        out.write("rigid_group_collection_connected = " + ",".join([group_name for (group_name, _) in geometry.groups]) + "\n")
+        out.write("\n")
 
         out.write("; Panel definitions\n")
         for i, panel in enumerate(geometry.panels):
@@ -64,7 +64,7 @@ def write_crystfel_geom(filename, geometry, energy, clen, runid):
             out.write("%s/fs = %fx %+fy\n" % (name, -math.cos(rotation), math.sin(rotation)))
             out.write("%s/ss = %fx %+fy\n" % (name, -math.sin(rotation), -math.cos(rotation)))
             out.write("%s/corner_x = %f\n" % (name, -detx / pixel_size)) # px
-            out.write("%s/corner_y = %f\n\n" % (name, dety / pixel_size)) # px
+            out.write("%s/corner_y = %f\n" % (name, dety / pixel_size)) # px
             out.write("%s/coffset = %f\n\n" % (name, detz * 1E-6)) # m
 
         border, outer_border = get_border(geometry.panels[0].long_name)
@@ -78,19 +78,19 @@ def write_crystfel_geom(filename, geometry, energy, clen, runid):
                 out.write("bad%sl1/max_fs = %d\n"    % (name, border - 1))
                 out.write("bad%sl1/min_ss = %d\n"    % (name, ysize * i))
                 out.write("bad%sl1/max_ss = %d\n"    % (name, ysize * (i + 1) - 1))
-                out.write("bad%sl1/panel  = q%d\n\n" % (name, i + 1))
+                out.write("bad%sl1/panel  = %s\n\n" % (name, name))
 
                 out.write("bad%sl2/min_fs = %d\n"    % (name, xsize - border))
                 out.write("bad%sl2/max_fs = %d\n"    % (name, xsize - 1))
                 out.write("bad%sl2/min_ss = %d\n"    % (name, ysize * i))
                 out.write("bad%sl2/max_ss = %d\n"    % (name, ysize * (i + 1) - 1))
-                out.write("bad%sl2/panel  = q%d\n\n" % (name, i + 1))
+                out.write("bad%sl2/panel  = %s\n\n" % (name, name))
 
                 out.write("bad%ss1/min_fs = %d\n"    % (name, 0))
                 out.write("bad%ss1/max_fs = %d\n"    % (name, xsize - 1))
                 out.write("bad%ss1/min_ss = %d\n"    % (name, ysize * i))
                 out.write("bad%ss1/max_ss = %d\n"    % (name, ysize * i + border - 1))
-                out.write("bad%ss1/panel  = q%d\n\n" % (name, i + 1))
+                out.write("bad%ss1/panel  = %s\n\n" % (name, name))
 
         if outer_border != 0:
             out.write("; Bad regions near outer edges of each sensor due to amplifier shields;\n")
