@@ -11,7 +11,7 @@ import re
 
 from ostrich import VERSION
 
-def write_crystfel_geom(filename, geometry, energy, clen, runid):
+def write_crystfel_geom(filename, geometry, energy, adu_per_photon, clen, runid):
     xsize = geometry.width
     ysize = geometry.height
     npanels = len(geometry.panels)
@@ -52,11 +52,8 @@ def write_crystfel_geom(filename, geometry, energy, clen, runid):
             pixel_size = geometry.pixel_size
             print("panel %s gain %f pos (%f, %f, %f) rotation %f energy %f" % (name, gain, detx, dety, detz, rotation, energy))
 
-            # Nphotons = S [ADU] * G [e-/ADU] / (E [eV] / 3.65 [eV/e-]) according to the manual.
-            # Thus, ADU/eV = 1/(3.65*G)
             out.write("; sensor %s\n" % panel.long_name)
-            # TODO: make this more general
-            out.write("%s/adu_per_eV = %f\n" % (name, 1.0 / (0.1 * energy))) # Keitaro's 0.1 photon
+            out.write("%s/adu_per_eV = %f\n" % (name, adu_per_photon / energy))
             out.write("%s/min_fs = %d\n" % (name, 0))
             out.write("%s/min_ss = %d\n" % (name, i * ysize))
             out.write("%s/max_fs = %d\n" % (name, xsize - 1))
@@ -222,11 +219,15 @@ def make_pixelmask(geometry, runid):
 
     return mask
 
-def write_metadata(filename, geometry, clen, comment, runid):
+def write_metadata(filename, geometry, clen, comment, runid, adu_per_photon):
     f = h5py.File(filename, "w")
-    
+   
+    if adu_per_photon != 10.0:
+        print("WARNING: DIALS assumes adu_per_photon is 10.0.")
+        print("    Because you set it to be %f, you have to explicitly specify it during data processing." % adu_per_photon)
     f["/metadata/pipeline_version"] = VERSION
     f["/metadata/run_comment"] = comment
+    f["/metadata/adu_per_photon"] = adu_per_photon
     f["/metadata/sensor_id"] = [panel.long_name for panel in geometry.panels]
     f["/metadata/posx_in_um"] = [panel.pos_x for panel in geometry.panels]
     f["/metadata/posy_in_um"] = [panel.pos_y for panel in geometry.panels]

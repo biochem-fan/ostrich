@@ -6,7 +6,7 @@ import numpy as np
 
 import stpy
 
-def add_image_par(read_queue, result_queue, detector):
+def add_image_par(read_queue, result_queue, detector, adu_per_photon):
     detector.allocate_readers()
 
     xsize = detector.geometry.width
@@ -28,14 +28,14 @@ def add_image_par(read_queue, result_queue, detector):
                 for i in range(npanels):
                     detector.readers[i].collect(detector.buffers[i], tag)
                     data = detector.buffers[i].read_det_data(0)
-                    data *= gains[i] * 3.65 / 0.1 / energy
+                    data *= gains[i] * 3.65 * adu_per_photon / energy
                     local_buffer[(ysize * i):(ysize * (i + 1)),] += data
             except Exception as e:
                 print(e)
                 continue # FIXME: report error
             local_n_added += 1
 
-def average_images(detector, tags, photon_energies, nproc=8):
+def average_images(detector, tags, photon_energies, adu_per_photon, nproc=8):
     xsize = detector.geometry.width
     ysize = detector.geometry.height
     npanels = len(detector.geometry.panels)
@@ -54,7 +54,7 @@ def average_images(detector, tags, photon_energies, nproc=8):
                     raise RuntimeError("FailedOn_collect_data")
 
                 data = detector.buffers[i].read_det_data(0)
-                data *= gains[i] * 3.65 / 0.1 / energy
+                data *= gains[i] * 3.65 * adu_per_photon / energy
                 sum_buffer[(ysize * i):(ysize * (i + 1)),] += data
 
             return 1
@@ -71,7 +71,7 @@ def average_images(detector, tags, photon_energies, nproc=8):
         workers = []
         detector.deallocate_readers()
         for i in range(nproc):
-            p = Process(target=add_image_par, args=(read_queue, result_queue, detector))
+            p = Process(target=add_image_par, args=(read_queue, result_queue, detector, adu_per_photon))
             p.start()
             workers.append(p)
         

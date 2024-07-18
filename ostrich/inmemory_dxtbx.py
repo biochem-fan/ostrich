@@ -14,17 +14,18 @@ from dxtbx.format.FormatStill import FormatStill
 from scitbx import matrix
 
 class FormatSACLAInMemory(FormatStill):
-    def __init__(self, buffers, geometry, energy, distance=50.0):
+    def __init__(self, buffers, geometry, energy, adu_per_photon, distance=50.0):
         assert len(buffers) == len(geometry.panels)
 
         self._image = tuple(flex.int(buf.astype(np.int32)) for buf in buffers)
         self._beam = BeamFactory.simple(factor_ev_angstrom / energy) 
-        self.setup_detector(geometry, distance)
+        self.setup_detector(geometry, distance, adu_per_photon)
 
-    def setup_detector(self, geometry, distance):
+    def setup_detector(self, geometry, distance, adu_per_photon):
         wavelength = self.get_beam().get_wavelength()
 
         table = attenuation_coefficient.get_table("Si")
+        # TODO: confirm the unit of thickness
         mu = table.mu_at_angstrom(wavelength) / 10.0
         px_mm = ParallaxCorrectedPxMmStrategy(mu, geometry.thickness)
 
@@ -53,7 +54,7 @@ class FormatSACLAInMemory(FormatStill):
             p.set_thickness(geometry.thickness)
             p.set_local_frame(fast.elems, slow.elems, origin.elems)
             p.set_px_mm_strategy(px_mm)
-            p.set_gain(10)
+            p.set_gain(adu_per_photon)
 
         self._detector = detector
 

@@ -88,6 +88,7 @@ def run(params):
     bl = params.bl
     clen = params.clen
     nproc = params.nproc
+    adu_per_photon = params.adu_per_photon
 
     # Get Run info
     try:
@@ -135,19 +136,19 @@ def run(params):
     print("Configured photon energy: %f eV\n" % config_photon_energy)
 
     # Create geometry files
-    write_crystfel_geom("%d.geom" % runid, detector.geometry, mean_energy, clen, runid)
+    write_crystfel_geom("%d.geom" % runid, detector.geometry, mean_energy, adu_per_photon, clen, runid)
     # write_cheetah_geom("%d-geom.h5" % runid, detector.geometry)
 
     # Write metadata
     output_filename = "run%d-%s.h5" % (runid, params.runtype)
-    write_metadata(output_filename, detector.geometry, clen, comment, runid)
+    write_metadata(output_filename, detector.geometry, clen, comment, runid, adu_per_photon)
     print()
 
     # Create dark average
     if not is_citius:
-        print("\nCalculating a dark average over %d images:\n" % len(calib_images))
+        print("Calculating a dark average over %d images:\n" % len(calib_images))
         photon_energies_calib = pulse_energies[np.logical_not(exposed)]
-        dark_average = average_images(detector, calib_images, photon_energies_calib, nproc)
+        dark_average = average_images(detector, calib_images, photon_energies_calib, adu_per_photon, nproc)
 
         f = h5py.File("%d-dark.h5" % runid, "w")
         f.create_dataset("/data/data", data=dark_average, compression="gzip", shuffle=True)
@@ -230,6 +231,10 @@ compression_level = 6
  .help = GZIP compression level for output frames
  .type = int(value_min = 0, value_max = 9)
 
+adu_per_photon = 10
+ .help = Output value per photon
+ .type = float(value_min=0.1, value_max = 100)
+
 output {
     shoeboxes = False
         .type = bool
@@ -268,6 +273,7 @@ if __name__ == "__main__":
     print("Option: runtype           = %s" % params.runtype)
     print("Option: nproc             = %d" % params.nproc)
     print("Option: compression_level = %d" % params.compression_level)
+    print("Option: adu_per_photon    = %.1f / photon" % params.adu_per_photon)
     print()
 
     run(params)

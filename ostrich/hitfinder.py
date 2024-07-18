@@ -20,6 +20,7 @@ from ostrich.inmemory_dxtbx import FormatSACLAInMemory
 def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
     detector.allocate_readers()
     hit_threshold = params.hit_threshold
+    adu_per_photon = params.adu_per_photon
 
     gains = [panel.gain for panel in detector.geometry.panels]
     xsize = detector.geometry.width
@@ -28,8 +29,6 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
     cp, cy, cx = (npanels, ysize // chunksize[0], xsize // chunksize[1])
     compression_level = params.compression_level
 
-    # TODO: make this an argument
-    adu_per_photon = 10
     while True:
         task = read_queue.get()
         if task is None:
@@ -41,11 +40,15 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
             for reader, buf in zip(detector.readers, detector.buffers):
                 reader.collect(buf, tag)
 
-            # ADU = N_photon * photon_energy / 3.65 / gain
-            # 3.65 is eV to make an electron-hole pair in silicon.
-            # SACLA's gain is the number of electron-hole pair per ADU, while DIALS's gain is photon/ADU.
-            # Thus, N_photon = ADU * 3.65 * gain / photon_energy.
-            # We use the "0.1 photon" unit for MPCCD (i.e. DIALS's gain = 0.1 by definition)
+            # We quantize such that one photon is adu_per_photon output (i.e. DIALS's gain = 1 / adu_per_photon by definition).
+            #
+            # ValuesInFile = N_photon * adu_per_photon
+            #  = CameraValueFromAPI [ADU] * GainSacla [e-/ADU] / (E_photon [eV] / 3.65 [eV/e-]) * adu_per_photon
+            # CameraValueFromAPI = N_photon * E_photon / 3.65 / G
+            # 3.65 is the energy required to make an electron-hole pair in silicon.
+            # SACLA's gain (G) is the number of electron-hole pair per ADU, while DIALS's gain is photon/ADU.
+            # For CITIUS, G = 1.00, since the values from API are normalized to the number of electrons.
+
             image_buf = [(buf.read_det_data(0) * (gain * 3.65 * adu_per_photon / pulse_energy)).astype(np.int32) \
                          for gain, buf in zip(gains, detector.buffers)]
         else:
@@ -56,7 +59,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
             print(tag)
             continue
 
-        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy)
+        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, adu_per_photon)
         imageset = ImageSet(ImageSetData(MemReader([image,]), None))
         imageset.set_beam(image.get_beam())
         imageset.set_detector(image.get_detector())
