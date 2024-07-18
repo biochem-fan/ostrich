@@ -13,7 +13,7 @@ from dxtbx.model import ParallaxCorrectedPxMmStrategy
 from dxtbx.format.FormatStill import FormatStill
 from scitbx import matrix
 
-class FormatMPCCDInMemory(FormatStill):
+class FormatSACLAInMemory(FormatStill):
     def __init__(self, buffers, geometry, energy, distance=50.0):
         assert len(buffers) == len(geometry.panels)
 
@@ -35,14 +35,15 @@ class FormatMPCCDInMemory(FormatStill):
                        ( 0, 0, distance))
 
         for i, panel in enumerate(geometry.panels):
-            angle = panel['rotation'] * math.pi / 180.0
+            angle = panel.rotation
+            # TODO: confirm!
             fast = matrix.col((math.cos(angle), math.sin(angle), 0))
             slow = matrix.col((-math.sin(angle), math.cos(angle), 0))
             normal = fast.cross(slow)
 
-            origin = matrix.col((-panel['pos_x'],
-                                  panel['pos_y'],
-                                  panel['pos_z'])) / 1000.0
+            origin = matrix.col((-panel.pos_x,
+                                  panel.pos_y,
+                                  panel.pos_z)) / 1000.0
             p = root.add_panel()
             p.set_type("SENSOR_PAD")
             p.set_name('Panel%d' % i)

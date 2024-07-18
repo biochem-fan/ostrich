@@ -14,19 +14,22 @@ from dxtbx.imageset import ImageSet, ImageSetData, MemReader
 from dxtbx.model.experiment_list import ExperimentListFactory
 from scitbx import matrix
 
-from ostrich.inmemory_dxtbx import FormatMPCCDInMemory
+from ostrich.detector import CITIUSDetector, MPCCDDetector
+from ostrich.inmemory_dxtbx import FormatSACLAInMemory
 
 def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
     detector.allocate_readers()
     hit_threshold = params.hit_threshold
 
-    gains = [panel['gain'] for panel in detector.geometry.panels]
+    gains = [panel.gain for panel in detector.geometry.panels]
     xsize = detector.geometry.width
     ysize = detector.geometry.height
     npanels = len(detector.geometry.panels)
     cp, cy, cx = (npanels, ysize // chunksize[0], xsize // chunksize[1])
     compression_level = params.compression_level
 
+    # TODO: make this an argument
+    adu_per_photon = 10
     while True:
         task = read_queue.get()
         if task is None:
@@ -34,22 +37,26 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
             break
         tag, pulse_energy = task
 
-        for reader, buf in zip(detector.readers, detector.buffers):
-            reader.collect(buf, tag)
+        if isinstance(detector, MPCCDDetector):
+            for reader, buf in zip(detector.readers, detector.buffers):
+                reader.collect(buf, tag)
 
-        # ADU = N_photon * photon_energy / 3.65 / gain
-        # 3.65 is eV to make an electron-hole pair in silicon.
-        # SACLA's gain is the number of electron-hole pair per ADU, while DIALS's gain is photon/ADU.
-        # Thus, N_photon = ADU * 3.65 * gain / photon_energy.
-        # We use the "0.1 photon" unit (i.e. DIALS's gain = 0.1 by definition)
-        image_buf = [(buf.read_det_data(0) * (gain * 3.65 * 10 / pulse_energy)).astype(np.int32) \
-                     for gain, buf in zip(gains, detector.buffers)]
+            # ADU = N_photon * photon_energy / 3.65 / gain
+            # 3.65 is eV to make an electron-hole pair in silicon.
+            # SACLA's gain is the number of electron-hole pair per ADU, while DIALS's gain is photon/ADU.
+            # Thus, N_photon = ADU * 3.65 * gain / photon_energy.
+            # We use the "0.1 photon" unit for MPCCD (i.e. DIALS's gain = 0.1 by definition)
+            image_buf = [(buf.read_det_data(0) * (gain * 3.65 * adu_per_photon / pulse_energy)).astype(np.int32) \
+                         for gain, buf in zip(gains, detector.buffers)]
+        else:
+            image_buf = [detector.buffers.read_image(panel.index, tag) * (adu_per_photon * 3.65 / pulse_energy) \
+                       for panel in detector.geometry.panels]
 
         if False: # skip DIALS
             print(tag)
             continue
 
-        image = FormatMPCCDInMemory(image_buf, detector.geometry, pulse_energy)
+        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy)
         imageset = ImageSet(ImageSetData(MemReader([image,]), None))
         imageset.set_beam(image.get_beam())
         imageset.set_detector(image.get_detector())
@@ -61,7 +68,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
 
         observed = flex.reflection_table.from_observations(experiments, params, is_stills=True)
         xyzobs = observed['xyzobs.px.value']
-        print(tag, len(xyzobs))
+        # print(tag, len(xyzobs))
         if len(xyzobs) < hit_threshold:
             result_queue.put([tag, len(xyzobs), None])
             continue
@@ -70,6 +77,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
         chunkidx = 0
         compressed_chunks = [None] * (cp * cy * cx)
         for ip in range(cp):
+            # TODO: change type for CITIUS
             image_buf[ip].clip(0, np.iinfo(np.uint16).max, out=image_buf[ip])
             uint16buf = image_buf[ip].astype(np.uint16)
             byteview = uint16buf.view(dtype=np.uint8)
@@ -93,13 +101,17 @@ def find_hits(detector, tags, pulse_energies, output_filename, params):
     nproc = params.nproc
     hit_threshold = params.hit_threshold
 
-    gains = [panel['gain'] for panel in detector.geometry.panels]
+    gains = [panel.gain for panel in detector.geometry.panels]
     xsize = detector.geometry.width
     ysize = detector.geometry.height
     npanels = len(detector.geometry.panels)
 
     # Chunking parameters
-    chunksize = (256, 256)
+    if isinstance(detector, MPCCDDetector):
+        chunksize = (256, 256) # slow, fast
+    else:
+        chunksize = (ysize, xsize)
+
     assert ysize % chunksize[0] == 0
     assert xsize % chunksize[1] == 0
     cp, cy, cx = (npanels, ysize // chunksize[0], xsize // chunksize[1])
@@ -113,7 +125,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, params):
     detector.deallocate_readers()
     for i in range(nproc):
         p = Process(target=queue_based_worker, args=(read_queue, result_queue, \
-                      chunksize, detector, params))
+                    chunksize, detector, params))
         p.start()
         workers.append(p)
 

@@ -19,17 +19,17 @@ def write_crystfel_geom(filename, geometry, energy, clen, runid):
     with open(filename, "w") as out:
         out.write("; CrystFEL geometry file produced by Ostrich version %d\n" % VERSION)
         out.write(";   Takanori Nakane (tnakane.protein@osaka-u.ac.jp)\n")
-        out.write("; for tiled but NOT reassembled images (512x8192 pixels)\n\n")
+        # out.write("; for tiled but NOT reassembled images (512x8192 pixels)\n\n")
         out.write("clen = %.4f               ; %.1f mm camera length. You SHOULD optimize this!\n" % (clen * 1E-3, clen))
         out.write("res = 20000                 ; = 1 m /50 micron\n")
-        out.write(";badrow_direction = x\n")
-        out.write(";max_adu = 250000           ; should NOT be used. see best practice on CrystFEL's Web site\n")
         out.write("data = /%/data\n")
+        # TODO: CrystFEL mask
         out.write(";mask = /metadata/pixelmask ; this does not work in CrystFEL 0.6.2 (reported bug)\n")
-        out.write("mask_good = 0x00            ; instead, we can specify bad regions below if necessary\n")
-        out.write("mask_bad = 0xFF\n")
+        out.write(";mask_good = 0x00            ; instead, we can specify bad regions below if necessary\n")
+        out.write(";mask_bad = 0xFF\n")
         out.write("photon_energy = /%%/photon_energy_ev ; roughly %.1f eV\n\n" % energy)
         out.write("; Definitions for geoptimiser\n")
+        # TODO: detector grouping
         out.write("rigid_group_q1 = q1\n")
         out.write("rigid_group_q2 = q2\n")
         out.write("rigid_group_q3 = q3\n")
@@ -43,68 +43,67 @@ def write_crystfel_geom(filename, geometry, energy, clen, runid):
 
         out.write("; Panel definitions\n")
         for i, panel in enumerate(geometry.panels):
-            name = panel['id']
-            gain = panel['gain']
-            detx = panel['pos_x']
-            dety = panel['pos_y']
-            detz = panel['pos_z']
-            rotation = panel['rotation'] * (math.pi / 180.0) # rad
+            name = panel.name
+            gain = panel.gain
+            detx = panel.pos_x
+            dety = panel.pos_y
+            detz = panel.pos_z
+            rotation = panel.rotation
             pixel_size = geometry.pixel_size
             print("panel %s gain %f pos (%f, %f, %f) rotation %f energy %f" % (name, gain, detx, dety, detz, rotation, energy))
 
-            detx /= pixel_size; dety /= pixel_size;
-            det_id = i + 1
-
             # Nphotons = S [ADU] * G [e-/ADU] / (E [eV] / 3.65 [eV/e-]) according to the manual.
             # Thus, ADU/eV = 1/(3.65*G)
-            out.write("; sensor %s\n" % name)
-            out.write("q%d/adu_per_eV = %f\n" % (det_id, 1.0 / (0.1 * energy))) # Keitaro's 0.1 photon
-            out.write("q%d/min_fs = %d\n" % (det_id, 0))
-            out.write("q%d/min_ss = %d\n" % (det_id, i * ysize))
-            out.write("q%d/max_fs = %d\n" % (det_id, xsize - 1))
-            out.write("q%d/max_ss = %d\n" % (det_id, (i + 1) * ysize - 1))
-            out.write("q%d/fs = %fx %+fy\n" % (det_id, -math.cos(rotation), math.sin(rotation)))
-            out.write("q%d/ss = %fx %+fy\n" % (det_id, -math.sin(rotation), -math.cos(rotation)))
-            out.write("q%d/corner_x = %f\n" % (det_id, -detx))
-            out.write("q%d/corner_y = %f\n\n" % (det_id, dety))
+            out.write("; sensor %s\n" % panel.long_name)
+            # TODO: make this more general
+            out.write("%s/adu_per_eV = %f\n" % (name, 1.0 / (0.1 * energy))) # Keitaro's 0.1 photon
+            out.write("%s/min_fs = %d\n" % (name, 0))
+            out.write("%s/min_ss = %d\n" % (name, i * ysize))
+            out.write("%s/max_fs = %d\n" % (name, xsize - 1))
+            out.write("%s/max_ss = %d\n" % (name, (i + 1) * ysize - 1))
+            out.write("%s/fs = %fx %+fy\n" % (name, -math.cos(rotation), math.sin(rotation)))
+            out.write("%s/ss = %fx %+fy\n" % (name, -math.sin(rotation), -math.cos(rotation)))
+            out.write("%s/corner_x = %f\n" % (name, -detx / pixel_size)) # px
+            out.write("%s/corner_y = %f\n\n" % (name, dety / pixel_size)) # px
+            out.write("%s/coffset = %f\n\n" % (name, detz * 1E-6)) # m
 
-        border, outer_border = get_border(geometry.panels[0]['id'])
+        border, outer_border = get_border(geometry.panels[0].long_name)
         if border != 0:
             out.write("; Bad regions near edges of each sensor.\n")
             out.write(";  l: long axis, s: short axis\n")
             out.write("; NOTE: ranges are 0-indexed and inclusive in CrystFEL\n")
 
             for i in range(npanels):
-                out.write("badq%dl1/min_fs = %d\n"    % (i + 1, 0))
-                out.write("badq%dl1/max_fs = %d\n"    % (i + 1, border - 1))
-                out.write("badq%dl1/min_ss = %d\n"    % (i + 1, ysize * i))
-                out.write("badq%dl1/max_ss = %d\n"    % (i + 1, ysize * (i + 1) - 1))
-                out.write("badq%dl1/panel  = q%d\n\n" % (i + 1, i + 1))
+                out.write("bad%sl1/min_fs = %d\n"    % (name, 0))
+                out.write("bad%sl1/max_fs = %d\n"    % (name, border - 1))
+                out.write("bad%sl1/min_ss = %d\n"    % (name, ysize * i))
+                out.write("bad%sl1/max_ss = %d\n"    % (name, ysize * (i + 1) - 1))
+                out.write("bad%sl1/panel  = q%d\n\n" % (name, i + 1))
 
-                out.write("badq%dl2/min_fs = %d\n"    % (i + 1, xsize - border))
-                out.write("badq%dl2/max_fs = %d\n"    % (i + 1, xsize - 1))
-                out.write("badq%dl2/min_ss = %d\n"    % (i + 1, ysize * i))
-                out.write("badq%dl2/max_ss = %d\n"    % (i + 1, ysize * (i + 1) - 1))
-                out.write("badq%dl2/panel  = q%d\n\n" % (i + 1, i + 1))
+                out.write("bad%sl2/min_fs = %d\n"    % (name, xsize - border))
+                out.write("bad%sl2/max_fs = %d\n"    % (name, xsize - 1))
+                out.write("bad%sl2/min_ss = %d\n"    % (name, ysize * i))
+                out.write("bad%sl2/max_ss = %d\n"    % (name, ysize * (i + 1) - 1))
+                out.write("bad%sl2/panel  = q%d\n\n" % (name, i + 1))
 
-                out.write("badq%ds1/min_fs = %d\n"    % (i + 1, 0))
-                out.write("badq%ds1/max_fs = %d\n"    % (i + 1, xsize - 1))
-                out.write("badq%ds1/min_ss = %d\n"    % (i + 1, ysize * i))
-                out.write("badq%ds1/max_ss = %d\n"    % (i + 1, ysize * i + border - 1))
-                out.write("badq%ds1/panel  = q%d\n\n" % (i + 1, i + 1))
+                out.write("bad%ss1/min_fs = %d\n"    % (name, 0))
+                out.write("bad%ss1/max_fs = %d\n"    % (name, xsize - 1))
+                out.write("bad%ss1/min_ss = %d\n"    % (name, ysize * i))
+                out.write("bad%ss1/max_ss = %d\n"    % (name, ysize * i + border - 1))
+                out.write("bad%ss1/panel  = q%d\n\n" % (name, i + 1))
 
         if outer_border != 0:
             out.write("; Bad regions near outer edges of each sensor due to amplifier shields;\n")
             out.write("; you might want to optimize these widths (edit min_ss).\n")
 
             for i in range(npanels):
-                out.write("badq%ds2/min_fs = %d\n"    % (i + 1, 0))
-                out.write("badq%ds2/max_fs = %d\n"    % (i + 1, xsize - 1))
-                out.write("badq%ds2/min_ss = %d\n"    % (i + 1, ysize * (i + 1) - outer_border))
-                out.write("badq%ds2/max_ss = %d\n"    % (i + 1, ysize * (i + 1) - 1))
-                out.write("badq%ds2/panel  = q%d\n\n" % (i + 1, i + 1))
+                out.write("bad%ss2/min_fs = %d\n"    % (name, 0))
+                out.write("bad%ss2/max_fs = %d\n"    % (name, xsize - 1))
+                out.write("bad%ss2/min_ss = %d\n"    % (name, ysize * (i + 1) - outer_border))
+                out.write("bad%ss2/max_ss = %d\n"    % (name, ysize * (i + 1) - 1))
+                out.write("bad%ss2/panel  = q%d\n\n" % (name, i + 1))
 
-        if re.match("MPCCD-8B0-2-003", geometry.panels[0]['id']):
+        if re.match("MPCCD-8B0-2-003", geometry.panels[0].long_name):
             out.write("; Severly damaged Phase 3 detector\n")
             out.write("baddamage1/min_fs = 501\n")
             out.write("baddamage1/max_fs = 511\n")
@@ -154,11 +153,11 @@ def write_cheetah_geom(filename, geometry):
     posz = posx.copy()
 
     for i, panel in enumerate(geometry.panels):
-        gain = panel['gain']
-        detx = panel['pos_x'] * 1E-6 # m
-        dety = panel['pos_y'] * 1E-6
-        detz = panel['pos_z'] * 1E-6
-        rotation = panel['rotation'] * (math.pi / 180.0) # rad
+        gain = panel.gain
+        detx = panel.pos_x * 1E-6 # m
+        dety = panel.pos_y * 1E-6
+        detz = panel.pos_z * 1E-6
+        rotation = panel.rotation
         pixel_size = geometry.pixel_size * 1E-6 # m
         
         fast_x = math.cos(rotation) * pixel_size
@@ -200,7 +199,7 @@ def make_pixelmask(geometry, runid):
     ysize = geometry.height
     npanels = len(geometry.panels)
 
-    det_name = geometry.panels[0]["id"]
+    det_name = geometry.panels[0].long_name
     border, outer_border = get_border(det_name)
 
     mask = np.zeros((ysize * npanels, xsize), dtype=np.uint16)
@@ -228,11 +227,11 @@ def write_metadata(filename, geometry, clen, comment, runid):
     
     f["/metadata/pipeline_version"] = VERSION
     f["/metadata/run_comment"] = comment
-    f["/metadata/sensor_id"] = [panel['id'] for panel in geometry.panels]
-    f["/metadata/posx_in_um"] = [panel['pos_x'] for panel in geometry.panels]
-    f["/metadata/posy_in_um"] = [panel['pos_y'] for panel in geometry.panels]
-    f["/metadata/posz_in_um"] = [panel['pos_z'] for panel in geometry.panels]
-    f["/metadata/angle_in_rad"] = [panel['rotation'] for panel in geometry.panels]
+    f["/metadata/sensor_id"] = [panel.long_name for panel in geometry.panels]
+    f["/metadata/posx_in_um"] = [panel.pos_x for panel in geometry.panels]
+    f["/metadata/posy_in_um"] = [panel.pos_y for panel in geometry.panels]
+    f["/metadata/posz_in_um"] = [panel.pos_z for panel in geometry.panels]
+    f["/metadata/angle_in_rad"] = [panel.rotation for panel in geometry.panels]
     f["/metadata/pixelsizex_in_um"] = [geometry.pixel_size] * len(geometry.panels)
     f["/metadata/pixelsizey_in_um"] = [geometry.pixel_size] * len(geometry.panels)
     f["/metadata/distance_in_mm"] = clen

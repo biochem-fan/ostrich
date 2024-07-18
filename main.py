@@ -4,6 +4,7 @@
 # written by Takanori Nakane at Osaka University
 
 # TODO:
+# - dark subtraction for MPCCD
 # - move this to command_line.py or something
 # - help message
 # - test NeXus output
@@ -19,11 +20,12 @@ import numpy as np
 import re
 
 # SACLA APIs
+import ctdapy_xfel
 import dbpy
 
 from ostrich import VERSION
 from ostrich.dark_average import average_images
-from ostrich.detector import Detector
+from ostrich.detector import CITIUSDetector, MPCCDDetector
 from ostrich.geometry import *
 from ostrich.hitfinder import find_hits
 from ostrich.metadata import filter_mpccd_octal, is_exposed, get_photon_energies, syncdata2float
@@ -99,21 +101,32 @@ def run(params):
     print("Comment: %s\n" % comment)
 
     # Find detectors
-    det_ids_all = dbpy.read_detidlist(bl, runid)
-    print("Detector IDs: " + " ".join(det_ids_all))
-    det_ids = filter_mpccd_octal(det_ids_all)
-    print("MPCCD Octal IDs to use: " + " ".join(det_ids))
+    try: 
+        det_ids_all = dbpy.read_detidlist(bl, runid)
+        print("Detector IDs: " + " ".join(det_ids_all))
+        det_ids = filter_mpccd_octal(det_ids_all)
+        print("MPCCD Octal IDs to use: " + " ".join(det_ids))
+        is_citius = False
+    except:
+        ctrl_buf = ctdapy_xfel.CtrlBuffer(bl, runid)
+        det_ids = sorted(ctrl_buf.read_prbidlist())
+        print("CITIUS detector available PRB IDs: ", det_ids)
+        is_citius = True
     print()
 
     # Find images for dark average
     exposed = is_exposed(high_tag, tags, bl, runid)
     calib_images = [tag for tag, exposed in zip(tags, exposed) if not exposed]
+    exposed_images = [tag for tag, exposed in zip(tags, exposed) if exposed]
 
-    if np.sum(calib_images) == 0:
+    if not is_citius and np.sum(calib_images) == 0:
         RuntimeError("NoDarkImage")
 
     # Setup buffer readers
-    detector = Detector(det_ids, bl, runid, calib_images[0])
+    if is_citius:
+        detector = CITIUSDetector(det_ids, bl, runid, exposed_images[0])
+    else:
+        detector = MPCCDDetector(det_ids, bl, runid, exposed_images[0])
 
     # Collect pulse energies
     pulse_energies, config_photon_energy = get_photon_energies(bl, runid, high_tag, tags)
@@ -130,20 +143,32 @@ def run(params):
     write_metadata(output_filename, detector.geometry, clen, comment, runid)
 
     # Create dark average
-    print("\nCalculating a dark average over %d images:\n" % len(calib_images))
-    photon_energies_calib = pulse_energies[np.logical_not(exposed)]
-    averaged = average_images(detector, calib_images, photon_energies_calib, nproc)
+    if not is_citius:
+        print("\nCalculating a dark average over %d images:\n" % len(calib_images))
+        photon_energies_calib = pulse_energies[np.logical_not(exposed)]
+        dark_average = average_images(detector, calib_images, photon_energies_calib, nproc)
 
-    f = h5py.File("%d-dark.h5" % runid, "w")
-    f.create_dataset("/data/data", data=averaged, compression="gzip", shuffle=True)
-    f.close()
-    print("Dark average was written to %s" % ("%d-dark.h5" % runid))
-    print()
+        f = h5py.File("%d-dark.h5" % runid, "w")
+        f.create_dataset("/data/data", data=dark_average, compression="gzip", shuffle=True)
+        f.close()
+        print("Dark average was written to %s" % ("%d-dark.h5" % runid))
+        print()
 
-    exposed_images = [tag for tag, exposed in zip(tags, exposed) if exposed]
+    # Enumerate target tags for this job
     right_type = (classify_frames(params, high_tag, exposed_images) == runtype_to_num(params.runtype))
+    if is_citius:
+        citius_valid_tags = set(ctrl_buf.read_taglist())
+        are_valid = np.array([tag in citius_valid_tags for tag in exposed_images])
+        if not np.all(are_valid):
+            invalid_tags = [tag for tag, flag in zip(tags, are_valid) if not flag]
+            print("Warning: CITIUS images are unavailable for %d tag(s):" % len(invalid_tags), invalid_tags)
+            right_type = np.logical_and(right_type, are_valid)
+            print()
+
     target_images = [tag for tag, flag in zip(tags, right_type) if flag]
     print("%d images will be processed in this job out of %d exposed images" % (len(target_images), len(exposed_images)))
+    print()
+
     photon_energies_target = pulse_energies[exposed][right_type]
     find_hits(detector, target_images, photon_energies_target, output_filename, params)
 
