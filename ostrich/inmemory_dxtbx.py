@@ -17,7 +17,7 @@ class FormatSACLAInMemory(FormatStill):
     def __init__(self, buffers, geometry, energy, adu_per_photon, distance=50.0):
         assert len(buffers) == len(geometry.panels)
 
-        self._image = tuple(flex.int(buf.astype(np.int32)) for buf in buffers)
+        self._image = tuple(flex.float(buf) for buf in buffers)
         self._beam = BeamFactory.simple(factor_ev_angstrom / energy) 
         self.setup_detector(geometry, distance, adu_per_photon)
 
@@ -36,11 +36,11 @@ class FormatSACLAInMemory(FormatStill):
         root = detector.hierarchy()
         root.set_frame((-1, 0, 0),
                        ( 0, 1, 0),
-                       ( 0, 0, distance))
+                       ( 0, 0, -distance))
 
         for i, panel in enumerate(geometry.panels):
             angle = panel.rotation
-            # TODO: confirm!
+            # TODO: confirm the signs!
             fast = matrix.col((math.cos(angle), math.sin(angle), 0))
             slow = matrix.col((-math.sin(angle), math.cos(angle), 0))
             normal = fast.cross(slow)
@@ -52,7 +52,8 @@ class FormatSACLAInMemory(FormatStill):
             p.set_type("SENSOR_PAD")
             p.set_name('Panel%d' % i)
             p.set_image_size((geometry.width, geometry.height))
-            p.set_trusted_range((-1, 65535))
+            # we don't really apply saturation cutoff
+            p.set_trusted_range((-10 * adu_per_photon, 65535 * adu_per_photon))
             p.set_pixel_size((geometry.pixel_size, geometry.pixel_size))
             p.set_thickness(geometry.thickness)
             p.set_local_frame(fast.elems, slow.elems, origin.elems)

@@ -17,7 +17,7 @@ from scitbx import matrix
 from ostrich.detector import CITIUSDetector, MPCCDDetector
 from ostrich.inmemory_dxtbx import FormatSACLAInMemory
 
-def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
+def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, params):
     detector.allocate_readers()
     hit_threshold = params.hit_threshold
     adu_per_photon = params.adu_per_photon
@@ -80,11 +80,10 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
         chunkidx = 0
         compressed_chunks = [None] * (cp * cy * cx)
         for ip in range(cp):
-            # TODO: change type for CITIUS
-            image_buf[ip].clip(0, np.iinfo(np.uint16).max, out=image_buf[ip])
-            uint16buf = image_buf[ip].astype(np.uint16)
-            byteview = uint16buf.view(dtype=np.uint8) # ONLY the length of the fast axis changes
-            itemsize = uint16buf.dtype.itemsize
+            image_buf[ip].clip(np.iinfo(dtype).min, np.iinfo(dtype).max, out=image_buf[ip])
+            rounded_buf = np.rint(image_buf[ip]).astype(dtype)
+            byteview = rounded_buf.view(dtype=np.uint8) # ONLY the length of the fast axis changes
+            itemsize = rounded_buf.dtype.itemsize # dtype.itemsize (e.g. np.int32.itemsize) doesn't work
 
             for iy in range(cy):
                 for ix in range(cx):
@@ -103,11 +102,17 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, params):
 def find_hits(detector, tags, pulse_energies, output_filename, params):
     nproc = params.nproc
     hit_threshold = params.hit_threshold
+    is_citius = isinstance(detector, CITIUSDetector)
 
     gains = [panel.gain for panel in detector.geometry.panels]
     xsize = detector.geometry.width
     ysize = detector.geometry.height
     npanels = len(detector.geometry.panels)
+
+    if is_citius:
+        dtype = np.int32
+    else:
+        dtype = np.uint16
 
     # Chunking parameters
     if isinstance(detector, MPCCDDetector):
@@ -128,7 +133,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, params):
     detector.deallocate_readers()
     for i in range(nproc):
         p = Process(target=queue_based_worker, args=(read_queue, result_queue, \
-                    chunksize, detector, params))
+                    chunksize, detector, dtype, params))
         p.start()
         workers.append(p)
 
@@ -157,7 +162,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, params):
             g = h5out.create_group("tag-%d" % tag)
             g.create_dataset("photon_energy_ev", data=pulse_energy)
             d = g.create_dataset("data", (npanels * ysize, xsize), chunks=chunksize,
-                                 compression="gzip", compression_opts=compression_level, shuffle=True, dtype=np.uint16)
+                                 compression="gzip", compression_opts=compression_level, shuffle=True, dtype=dtype)
             chunkidx = 0
             for ip in range(cp):
                 for iy in range(cy):
