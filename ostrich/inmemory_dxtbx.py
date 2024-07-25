@@ -25,9 +25,12 @@ class FormatSACLAInMemory(FormatStill):
         wavelength = self.get_beam().get_wavelength()
 
         table = attenuation_coefficient.get_table("Si")
-        # TODO: confirm the unit of thickness
+        # According to dxtbx/model/parallax_correction.h,
+        # the unit of mu is 1/mm according, thickness t0 is mm, while geometry.thickness is um.
+        # According to cctbx/eltbx/attenuation_coefficient.h,
+        # mu_at_angstrom returns 1/cm
         mu = table.mu_at_angstrom(wavelength) / 10.0
-        px_mm = ParallaxCorrectedPxMmStrategy(mu, geometry.thickness)
+        px_mm = ParallaxCorrectedPxMmStrategy(mu, geometry.thickness / 1000.0)
 
         detector = Detector()
         root = detector.hierarchy()
