@@ -23,7 +23,7 @@ def write_crystfel_geom(filename, geometry, energy, adu_per_photon, clen, runid)
         out.write("clen = %.4f    ; %.1f mm camera length. You SHOULD optimize this!\n" % (clen * 1E-3, clen))
         out.write("res = %.1f     ; = 1 m / %.4f micron\n" % (1E6 / geometry.pixel_size, geometry.pixel_size))
         out.write("data = /%/data\n")
-        # TODO: CrystFEL mask
+        # TODO: CrystFEL pixel mask
         out.write(";mask = /metadata/pixelmask ; this does not work in CrystFEL 0.6.2 (reported bug)\n")
         out.write(";mask_good = 0x00            ; instead, we can specify bad regions below if necessary\n")
         out.write(";mask_bad = 0xFF\n")
@@ -224,7 +224,7 @@ def write_metadata(filename, geometry, clen, comment, runid, adu_per_photon):
    
     if adu_per_photon != 10.0:
         print("WARNING: DIALS assumes adu_per_photon is 10.0.")
-        print("    Because you set it to be %f, you have to explicitly specify it during data processing." % adu_per_photon)
+        print("         Because you set it to be %f, you have to explicitly specify it during data processing." % adu_per_photon)
     f["/metadata/pipeline_version"] = VERSION
     f["/metadata/run_comment"] = comment
     f["/metadata/adu_per_photon"] = adu_per_photon

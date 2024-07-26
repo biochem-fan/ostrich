@@ -3,13 +3,10 @@
 # Ostrich for SACLA SFX data proprocessing
 # written by Takanori Nakane at Osaka University
 
-# TODO:
-# - dark subtraction for MPCCD
-# - move this to command_line.py or something
-# - help message
-# - test NeXus output
-# - GUI integration
-# - study shared memory approach
+# - TODO: NeXus output
+# - TODO: GUI integration
+# - TODO: move this to command_line.py or something
+# - TODO: study shared memory approach
 #    e.g. https://stackoverflow.com/questions/37705974/why-are-multiprocessing-sharedctypes-assignments-so-slow
 #         https://qiita.com/kakinaguru_zo/items/f53e2485f15dd0d71f82
 
@@ -31,7 +28,7 @@ from ostrich.hitfinder import find_hits
 from ostrich.metadata import filter_mpccd_octal, is_exposed, get_photon_energies, syncdata2float
 
 def classify_frames(params, high_tag, tags):
-    # TODO: test!!
+    # TODO: test time-resolved mode
     ret = np.zeros(len(tags))
 
     if params.runtype.startswith("dark") or params.runtype == "light":
@@ -66,7 +63,7 @@ def classify_frames(params, high_tag, tags):
         for i in range(params.nblock):
             istart = i * width
             iend = (i + 1) * width
-            if (i == params.nblock):
+            if (i == params.nblock - 1):
                 iend = len(tags)
             ret[istart:iend] = i
 
@@ -119,6 +116,7 @@ def run(params):
     exposed = is_exposed(high_tag, tags, bl, runid)
     calib_images = [tag for tag, exposed in zip(tags, exposed) if not exposed]
     exposed_images = [tag for tag, exposed in zip(tags, exposed) if exposed]
+    assert len(calib_images) + len(exposed_images) == len(tags)
 
     if not is_citius and np.sum(calib_images) == 0:
         RuntimeError("NoDarkImage")
@@ -145,19 +143,25 @@ def run(params):
     print()
 
     # Create dark average
+    dark_average = None
     if not is_citius:
         print("Calculating a dark average over %d images:\n" % len(calib_images))
         photon_energies_calib = pulse_energies[np.logical_not(exposed)]
         dark_average = average_images(detector, calib_images, photon_energies_calib, adu_per_photon, nproc)
 
-        f = h5py.File("%d-dark.h5" % runid, "w")
-        f.create_dataset("/data/data", data=dark_average, compression="gzip", shuffle=True)
-        f.close()
-        print("Dark average was written to %s" % ("%d-dark.h5" % runid))
+        if False:
+            f = h5py.File("%d-dark.h5" % runid, "w")
+            f.create_dataset("/data/data", data=dark_average, compression="gzip", shuffle=True)
+            f.close()
+            print("Dark average was written to %s" % ("%d-dark.h5" % runid))
+
+        dark_average = np.split(dark_average, len(detector.geometry.panels), axis=0)
         print()
 
     # Enumerate target tags for this job
     right_type = (classify_frames(params, high_tag, exposed_images) == runtype_to_num(params.runtype))
+    assert len(exposed_images) == len(right_type)
+
     if is_citius:
         citius_valid_tags = set(ctrl_buf.read_taglist())
         are_valid = np.array([tag in citius_valid_tags for tag in exposed_images])
@@ -167,12 +171,14 @@ def run(params):
             right_type = np.logical_and(right_type, are_valid)
             print()
 
-    target_images = [tag for tag, flag in zip(tags, right_type) if flag]
-    print("%d images will be processed in this job out of %d exposed images" % (len(target_images), len(exposed_images)))
+    target_images = [tag for tag, flag in zip(exposed_images, right_type) if flag]
+    #print("exposed", exposed_images)
+    #print("target", target_images)
+    print("%d images will be processed in this job out of %d exposed images." % (len(target_images), len(exposed_images)))
     print()
 
     photon_energies_target = pulse_energies[exposed][right_type]
-    find_hits(detector, target_images, photon_energies_target, output_filename, params)
+    find_hits(detector, target_images, photon_energies_target, output_filename, dark_average, params)
 
 phil_str = '''
 bl = 2
@@ -243,6 +249,14 @@ output {
 include scope dials.algorithms.spot_finding.factory.phil_scope
 '''
 
+default_override_phil = '''
+spotfinder {
+    filter {
+        border= 4
+    }
+}
+'''
+
 if __name__ == "__main__":
     # Very annoyingly, stpy is not compatible with fork.
     # Internally, it never releases sockets to MySQL DAQ DB.
@@ -254,7 +268,7 @@ if __name__ == "__main__":
     from dials.util.options import ArgumentParser
     from libtbx.phil import parse
 
-    phil_scope = parse(phil_str, process_includes=True)
+    phil_scope = parse(phil_str, process_includes=True).fetch(parse(default_override_phil))
     params, options = ArgumentParser(phil=phil_scope).parse_args(show_diff_phil=True, return_unhandled=False)
 
     print("Ostrich: SACLA Data Preprocessing System version %d" % VERSION)

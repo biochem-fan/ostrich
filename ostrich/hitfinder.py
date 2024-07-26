@@ -17,7 +17,7 @@ from scitbx import matrix
 from ostrich.detector import CITIUSDetector, MPCCDDetector
 from ostrich.inmemory_dxtbx import FormatSACLAInMemory
 
-def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, params):
+def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dark_average, params):
     detector.allocate_readers()
     hit_threshold = params.hit_threshold
     adu_per_photon = params.adu_per_photon
@@ -49,8 +49,8 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, par
             # SACLA's gain (G) is the number of electron-hole pair per ADU, while DIALS's gain is photon/ADU.
             # For CITIUS, G = 1.00, since the values from API are normalized to the number of electrons.
 
-            image_buf = [(buf.read_det_data(0) * (gain * 3.65 * adu_per_photon / pulse_energy)).astype(np.int32) \
-                         for gain, buf in zip(gains, detector.buffers)]
+            image_buf = [buf.read_det_data(0) * (gain * 3.65 * adu_per_photon / pulse_energy) - dark \
+                         for gain, buf, dark in zip(gains, detector.buffers, dark_average)]
         else:
             image_buf = [detector.buffers.read_image(panel.index, tag) * (adu_per_photon * 3.65 / pulse_energy) \
                        for panel in detector.geometry.panels]
@@ -69,6 +69,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, par
             print(tag)
             continue
 
+        # TODO: use a pixel mask
         observed = flex.reflection_table.from_observations(experiments, params, is_stills=True)
         xyzobs = observed['xyzobs.px.value']
         # print(tag, len(xyzobs))
@@ -99,7 +100,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, par
 
         result_queue.put([tag, len(xyzobs), pulse_energy, compressed_chunks])
 
-def find_hits(detector, tags, pulse_energies, output_filename, params):
+def find_hits(detector, tags, pulse_energies, output_filename, dark_average, params):
     nproc = params.nproc
     hit_threshold = params.hit_threshold
     is_citius = isinstance(detector, CITIUSDetector)
@@ -133,7 +134,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, params):
     detector.deallocate_readers()
     for i in range(nproc):
         p = Process(target=queue_based_worker, args=(read_queue, result_queue, \
-                    chunksize, detector, dtype, params))
+                    chunksize, detector, dtype, dark_average, params))
         p.start()
         workers.append(p)
 
