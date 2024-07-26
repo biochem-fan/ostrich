@@ -11,6 +11,35 @@ import re
 
 from ostrich import VERSION
 
+# NeXus McStats:
+#  Z along the beam, towards the detector
+#  X towards horizontally left, looking from the source to the detector
+#  Y completes the right handed coordinate system (towards the ceiling)
+#
+# CrystFEL:
+#  Z along the beam, towards the detector
+#  Y towards the ceiling
+#  X completes the right handed coordinate system (towards horizontally left)
+#  Thus this is the same as NeXus McStats.
+#  Note that in the CrystFEL GUI, +X is horizontal, towards RIGHT,
+#  +Y is vertical, towards top. Thus it is looking the detector from the back
+#  towards the source.
+#
+# CBF (DIALS):
+#  Z along the beam, towards the source
+#  X goniometer axis
+#  Y completes the right handed coordinate system (towards ceiling, if X is horizontally right)
+#  For stills, it does not matter which way X is pointing. The difference ends up as an in-plane rotation.
+#  For example, we can take +X horizontally left and +Y gravity.
+#  The difference is merely a 180 degree rotation around the beam.
+#
+# MPCCD & CITIUS API:
+#  Z along the beam, towards the source (e.g. outer columns are closer to the source)
+#  X towards horizontally right, looking from the source to the detector
+#  Y completes the right handed coordinate system (i.e. towards the ceiling)
+#  Rotation is anti-clockwise.
+#  Thus, Z and X must be flipped for NeXus; X and Y for CBF/DIALS/dxtbx.
+
 def write_crystfel_geom(filename, geometry, energy, adu_per_photon, clen, runid):
     xsize = geometry.width
     ysize = geometry.height
@@ -23,10 +52,13 @@ def write_crystfel_geom(filename, geometry, energy, adu_per_photon, clen, runid)
         out.write("clen = %.4f    ; %.1f mm camera length. You SHOULD optimize this!\n" % (clen * 1E-3, clen))
         out.write("res = %.1f     ; = 1 m / %.4f micron\n" % (1E6 / geometry.pixel_size, geometry.pixel_size))
         out.write("data = /%/data\n")
-        # TODO: CrystFEL pixel mask
-        out.write(";mask = /metadata/pixelmask ; this does not work in CrystFEL 0.6.2 (reported bug)\n")
-        out.write(";mask_good = 0x00           ; instead, we can specify bad regions below if necessary\n")
-        out.write(";mask_bad = 0xFF\n")
+        out.write("; === Masks =========================\n")
+        out.write(";  Unfortunately, this pixel mask does not work in earlier versions of CrystFEL.\n")
+        out.write(";  CrystFEL 0.5 to 0.9: the mask is ignored because they request per-shot masks.\n")
+        out.write(";  CrystFEL > 0.10: OK\n")
+        out.write("mask = /metadata/pixelmask\n")
+        out.write("mask_good = 0x00\n")
+        out.write("mask_bad = 0xFF\n")
         out.write("photon_energy = /%%/photon_energy_ev ; roughly %.1f eV\n" % energy)
         out.write("\n")
 
@@ -58,6 +90,8 @@ def write_crystfel_geom(filename, geometry, energy, adu_per_photon, clen, runid)
             out.write("%s/min_ss = %d\n" % (name, i * ysize))
             out.write("%s/max_fs = %d\n" % (name, xsize - 1))
             out.write("%s/max_ss = %d\n" % (name, (i + 1) * ysize - 1))
+            # The sign before cosines is the opposite of my old Cheetah & dxtbx class
+            # but I believe this is correct.
             out.write("%s/fs = %fx %+fy\n" % (name, -math.cos(rotation), math.sin(rotation)))
             out.write("%s/ss = %fx %+fy\n" % (name, -math.sin(rotation), -math.cos(rotation)))
             out.write("%s/corner_x = %f\n" % (name, -detx / pixel_size)) # px
@@ -192,9 +226,7 @@ def get_border(det_name):
         return (0, 0)
 
 def make_pixelmask(geometry, runid):
-    '''
-    TODO: In NeXus, the mask is uint32 with bit 1: dead, 2: cold, 3: hot, 4: noisy.
-    '''
+    #TODO: In NeXus, the mask is uint32 with bit 1: dead, 2: cold, 3: hot, 4: noisy.
     xsize = geometry.width
     ysize = geometry.height
     npanels = len(geometry.panels)

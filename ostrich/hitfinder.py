@@ -139,9 +139,11 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     # Create workers
     detector.deallocate_readers()
     for i in range(nproc):
+        # TODO: serializatin of dark_average and pixel_mask is very slow.
         p = Process(target=queue_based_worker, args=(read_queue, result_queue, \
                     chunksize, detector, dtype, dark_average, pixel_mask, params))
         p.start()
+        print("Worker process", i, "started.")
         workers.append(p)
 
     # Send tasks
@@ -149,7 +151,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     for tag, pulse_energy in zip(tags, pulse_energies):
         read_queue.put([tag, pulse_energy])
         i += 1
-        if i > 200: break
+        #if i > 200: break # DEBUG
     for i in range(nproc): read_queue.put(None)
 
     n_finished = 0

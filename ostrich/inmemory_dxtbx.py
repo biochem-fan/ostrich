@@ -37,15 +37,17 @@ class FormatSACLAInMemory(FormatStill):
 
         detector = Detector()
         root = detector.hierarchy()
+        # This makes panel's coordinate system the same as CrystFEL (and NeXus/McStats).
         root.set_frame((-1, 0, 0),
                        ( 0, 1, 0),
                        ( 0, 0, -distance))
 
         for i, panel in enumerate(geometry.panels):
             angle = panel.rotation
-            # TODO: confirm the signs!
-            fast = matrix.col((math.cos(angle), math.sin(angle), 0))
-            slow = matrix.col((-math.sin(angle), math.cos(angle), 0))
+            # The sign before cosines is the opposite of my old Cheetah & dxtbx class
+            # but I believe this is correct.
+            fast = matrix.col((-math.cos(angle), math.sin(angle), 0))
+            slow = matrix.col((-math.sin(angle), -math.cos(angle), 0))
             normal = fast.cross(slow)
 
             origin = matrix.col((-panel.pos_x,
@@ -81,6 +83,7 @@ class FormatSACLAInMemory(FormatStill):
         return None
 
     def get_static_mask(self):
-        # TODO: I don't understand why Format.get_static_mask is never called.
+        # I don't understand why Format.get_static_mask is never called.
+        # Thus I ended up populating external_lookup.mask.data.
         print("DEBUG: get_static_mask")
         return self._mask
