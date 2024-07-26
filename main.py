@@ -108,7 +108,7 @@ def run(params):
     except:
         ctrl_buf = ctdapy_xfel.CtrlBuffer(bl, runid)
         det_ids = sorted(ctrl_buf.read_prbidlist())
-        print("CITIUS detector available PRB IDs: ", det_ids)
+        print("CITIUS detector available PRB IDs:", det_ids)
         is_citius = True
     print()
 
@@ -138,9 +138,13 @@ def run(params):
     # write_cheetah_geom("%d-geom.h5" % runid, detector.geometry)
 
     # Write metadata
+    pixel_mask = make_pixelmask(detector.geometry, runid)
     output_filename = "run%d-%s.h5" % (runid, params.runtype)
-    write_metadata(output_filename, detector.geometry, clen, comment, runid, adu_per_photon)
+    write_metadata(output_filename, detector.geometry, clen, comment, runid, adu_per_photon, pixel_mask)
     print()
+
+    # Make a boolean mask for DIALS hit finder
+    pixel_mask = np.split(pixel_mask == 0, len(detector.geometry.panels), axis=0)
 
     # Create dark average
     dark_average = None
@@ -178,7 +182,7 @@ def run(params):
     print()
 
     photon_energies_target = pulse_energies[exposed][right_type]
-    find_hits(detector, target_images, photon_energies_target, output_filename, dark_average, params)
+    find_hits(detector, target_images, photon_energies_target, output_filename, dark_average, pixel_mask, params)
 
 phil_str = '''
 bl = 2
@@ -252,7 +256,7 @@ include scope dials.algorithms.spot_finding.factory.phil_scope
 default_override_phil = '''
 spotfinder {
     filter {
-        border= 4
+#        border= 4
     }
 }
 '''

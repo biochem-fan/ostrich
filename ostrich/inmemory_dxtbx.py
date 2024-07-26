@@ -14,9 +14,12 @@ from dxtbx.format.FormatStill import FormatStill
 from scitbx import matrix
 
 class FormatSACLAInMemory(FormatStill):
-    def __init__(self, buffers, geometry, energy, adu_per_photon, distance=50.0):
+    def __init__(self, buffers, geometry, energy, adu_per_photon, mask=None, distance=50.0):
         assert len(buffers) == len(geometry.panels)
+        if mask is not None:
+            assert len(mask) == len(geometry.panels)
 
+        self._mask = mask
         self._image = tuple(flex.float(buf) for buf in buffers)
         self._beam = BeamFactory.simple(factor_ev_angstrom / energy) 
         self.setup_detector(geometry, distance, adu_per_photon)
@@ -76,3 +79,8 @@ class FormatSACLAInMemory(FormatStill):
 
     def get_goniometer(self, index=None):
         return None
+
+    def get_static_mask(self):
+        # TODO: I don't understand why Format.get_static_mask is never called.
+        print("DEBUG: get_static_mask")
+        return self._mask

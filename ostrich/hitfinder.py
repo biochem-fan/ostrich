@@ -10,6 +10,7 @@ import stpy
 
 # DIALS functions
 from dials.array_family import flex
+from dxtbx.format.image import ImageBool
 from dxtbx.imageset import ImageSet, ImageSetData, MemReader 
 from dxtbx.model.experiment_list import ExperimentListFactory
 from scitbx import matrix
@@ -17,7 +18,7 @@ from scitbx import matrix
 from ostrich.detector import CITIUSDetector, MPCCDDetector
 from ostrich.inmemory_dxtbx import FormatSACLAInMemory
 
-def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dark_average, params):
+def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dark_average, pixel_mask, params):
     detector.allocate_readers()
     hit_threshold = params.hit_threshold
     adu_per_photon = params.adu_per_photon
@@ -59,17 +60,17 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
             print(tag)
             continue
 
-        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, adu_per_photon)
+        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, adu_per_photon, distance=params.clen)
         imageset = ImageSet(ImageSetData(MemReader([image,]), None))
         imageset.set_beam(image.get_beam())
         imageset.set_detector(image.get_detector())
+        imageset.external_lookup.mask.data = pixel_mask
         experiments = ExperimentListFactory.from_imageset_and_crystal(imageset, None)
 
         if False: # skip spot-finding
             print(tag)
             continue
 
-        # TODO: use a pixel mask
         observed = flex.reflection_table.from_observations(experiments, params, is_stills=True)
         xyzobs = observed['xyzobs.px.value']
         # print(tag, len(xyzobs))
@@ -100,7 +101,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
 
         result_queue.put([tag, len(xyzobs), pulse_energy, compressed_chunks])
 
-def find_hits(detector, tags, pulse_energies, output_filename, dark_average, params):
+def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pixel_mask, params):
     nproc = params.nproc
     hit_threshold = params.hit_threshold
     is_citius = isinstance(detector, CITIUSDetector)
@@ -126,6 +127,11 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, par
     cp, cy, cx = (npanels, ysize // chunksize[0], xsize // chunksize[1])
     compression_level = params.compression_level
 
+    # Convert the pixel_mask to DIALS's flex array
+    if pixel_mask is not None:
+        assert len(pixel_mask) == npanels
+        pixel_mask = ImageBool(tuple([flex.bool(m) for m in pixel_mask]))
+
     read_queue = Queue()
     result_queue = Queue()
     workers = []
@@ -134,7 +140,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, par
     detector.deallocate_readers()
     for i in range(nproc):
         p = Process(target=queue_based_worker, args=(read_queue, result_queue, \
-                    chunksize, detector, dtype, dark_average, params))
+                    chunksize, detector, dtype, dark_average, pixel_mask, params))
         p.start()
         workers.append(p)
 

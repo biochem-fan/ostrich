@@ -25,7 +25,7 @@ def write_crystfel_geom(filename, geometry, energy, adu_per_photon, clen, runid)
         out.write("data = /%/data\n")
         # TODO: CrystFEL pixel mask
         out.write(";mask = /metadata/pixelmask ; this does not work in CrystFEL 0.6.2 (reported bug)\n")
-        out.write(";mask_good = 0x00            ; instead, we can specify bad regions below if necessary\n")
+        out.write(";mask_good = 0x00           ; instead, we can specify bad regions below if necessary\n")
         out.write(";mask_bad = 0xFF\n")
         out.write("photon_energy = /%%/photon_energy_ev ; roughly %.1f eV\n" % energy)
         out.write("\n")
@@ -192,6 +192,9 @@ def get_border(det_name):
         return (0, 0)
 
 def make_pixelmask(geometry, runid):
+    '''
+    TODO: In NeXus, the mask is uint32 with bit 1: dead, 2: cold, 3: hot, 4: noisy.
+    '''
     xsize = geometry.width
     ysize = geometry.height
     npanels = len(geometry.panels)
@@ -219,7 +222,7 @@ def make_pixelmask(geometry, runid):
 
     return mask
 
-def write_metadata(filename, geometry, clen, comment, runid, adu_per_photon):
+def write_metadata(filename, geometry, clen, comment, runid, adu_per_photon, pixel_mask):
     f = h5py.File(filename, "w")
    
     if adu_per_photon != 10.0:
@@ -238,6 +241,5 @@ def write_metadata(filename, geometry, clen, comment, runid, adu_per_photon):
     f["/metadata/pixelsizex_in_um"] = [geometry.pixel_size] * len(geometry.panels)
     f["/metadata/pixelsizey_in_um"] = [geometry.pixel_size] * len(geometry.panels)
     f["/metadata/distance_in_mm"] = clen
-    pixel_mask = make_pixelmask(geometry, runid)
     f.create_dataset("/metadata/pixelmask", data=pixel_mask, compression="gzip", shuffle=True)
     f.close()
