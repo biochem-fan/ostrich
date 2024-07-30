@@ -18,6 +18,7 @@ class DetectorPanel:
 
 class DetectorGeometry:
     def __init__(self):
+        self.name = ""
         self.pixel_size = 0 # um / px
         self.width = 0 # fast scan
         self.height = 0 # slow scan
@@ -43,7 +44,7 @@ class Detector:
     def validate_and_set_geometry(self, det_infos):
         raise NotImplementedError
 
-    def read_detinfos(self):  
+    def read_detinfos(self):
         raise NotImplementedError
 
 class CITIUSDetector(Detector):
@@ -57,7 +58,7 @@ class CITIUSDetector(Detector):
 
         # CITIUS API uses only one buffer for alll PRBs
         try:
-            self.buffers = ctdapy_xfel.CtrlBuffer(self.bl, self.runid) 
+            self.buffers = ctdapy_xfel.CtrlBuffer(self.bl, self.runid)
         except:
             raise RuntimeError("FailedOn_CtrlBuffer")
 
@@ -67,6 +68,7 @@ class CITIUSDetector(Detector):
     def validate_and_set_geometry(self, det_infos):
         self.geometry = DetectorGeometry()
 
+        self.geometry.name = "CITIUS 20.2M"
         self.geometry.width = ctdapy_xfel.CITIUS_IMAGE_WIDTH
         self.geometry.height = ctdapy_xfel.CITIUS_IMAGE_HEIGHT
         self.geometry.pixel_size = det_infos[0]['pixel_size_x']
@@ -79,7 +81,7 @@ class CITIUSDetector(Detector):
 
             panel = DetectorPanel()
             panel.name = "prb%02d" % det_info['id']
-            panel.long_name = "CITIUS 72 PRB %02d" % det_info['id']
+            panel.long_name = "CITIUS 20.2M PRB %02d" % det_info['id']
             panel.index = det_info['id']
             panel.pos_x = det_info['position_x']
             panel.pos_y = det_info['position_y']
@@ -101,7 +103,7 @@ class CITIUSDetector(Detector):
 
                 if len(prb_in_sss) > 0:
                     self.geometry.groups.append(("sss%d%d" % (x, y), prb_in_sss))
-    
+
     def read_detinfos(self):
         det_infos = [self.buffers.read_reconstinfo(prb_id, self.first_tag) for prb_id in self.det_ids]
         for det_info, prb_id in zip(det_infos, self.det_ids):
@@ -112,7 +114,7 @@ class CITIUSDetector(Detector):
     def deallocate_readers(self):
         self.readers = None
         self.buffers = None
-            
+
 class MPCCDDetector(Detector):
     def __init__(self, det_ids, bl, runid, first_tag):
         super().__init__(det_ids, bl, runid, first_tag)
@@ -136,6 +138,7 @@ class MPCCDDetector(Detector):
     def validate_and_set_geometry(self, det_infos):
         self.geometry = DetectorGeometry()
 
+        self.geometry.name = self.det_ids[0][:-2] # Remove panel ID "-N"
         self.geometry.width = det_infos[0]["xsize"]
         self.geometry.height = det_infos[0]["ysize"]
         self.geometry.pixel_size = det_infos[0]["mp_pixelsizex"]
@@ -164,7 +167,7 @@ class MPCCDDetector(Detector):
             panel.gain = det_info['mp_absgain']
             self.geometry.panels.append(panel)
             self.geometry.groups.append(("group%d" % (i + 1), [panel.name]))
-        
+
     def read_detinfos(self):
         for reader, buf in zip(self.readers, self.buffers):
             try:

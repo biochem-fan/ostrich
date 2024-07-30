@@ -83,7 +83,7 @@ def is_exposed(high_tag, tags, bl, runid):
             raise RuntimeError("NoShutterOpenStatus")
 
         exposed = [int(is_open) != 0 for is_open in shutter_open]
-    
+
     return exposed
 
 def get_photon_energies(bl, runid, high_tag, tags):

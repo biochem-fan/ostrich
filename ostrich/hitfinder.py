@@ -9,16 +9,17 @@ import zlib
 import stpy
 
 # DIALS functions
-from dials.array_family import flex
 from dxtbx.format.image import ImageBool
-from dxtbx.imageset import ImageSet, ImageSetData, MemReader 
+from dxtbx.imageset import ImageSet, ImageSetData, MemReader
 from dxtbx.model.experiment_list import ExperimentListFactory
 from scitbx import matrix
 
 from ostrich.detector import CITIUSDetector, MPCCDDetector
-from ostrich.inmemory_dxtbx import FormatSACLAInMemory
 
 def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dark_average, pixel_mask, params):
+    from dials.array_family import flex
+    from ostrich.inmemory_dxtbx import FormatSACLAInMemory
+
     detector.allocate_readers()
     hit_threshold = params.hit_threshold
     adu_per_photon = params.adu_per_photon
@@ -29,6 +30,11 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
     npanels = len(detector.geometry.panels)
     cp, cy, cx = (npanels, ysize // chunksize[0], xsize // chunksize[1])
     compression_level = params.compression_level
+
+    # Convert the pixel_mask to DIALS's flex array
+    if pixel_mask is not None:
+        assert len(pixel_mask) == npanels
+        pixel_mask = ImageBool(tuple([flex.bool(m) for m in pixel_mask]))
 
     while True:
         task = read_queue.get()
@@ -104,6 +110,8 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
 def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pixel_mask, params):
     nproc = params.nproc
     hit_threshold = params.hit_threshold
+    adu_per_photon = params.adu_per_photon
+    use_nexus = params.nexus
     is_citius = isinstance(detector, CITIUSDetector)
 
     gains = [panel.gain for panel in detector.geometry.panels]
@@ -116,7 +124,6 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     else:
         dtype = np.uint16
 
-    # Chunking parameters
     if isinstance(detector, MPCCDDetector):
         chunksize = (256, 256) # slow, fast
     else:
@@ -127,11 +134,6 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     cp, cy, cx = (npanels, ysize // chunksize[0], xsize // chunksize[1])
     compression_level = params.compression_level
 
-    # Convert the pixel_mask to DIALS's flex array
-    if pixel_mask is not None:
-        assert len(pixel_mask) == npanels
-        pixel_mask = ImageBool(tuple([flex.bool(m) for m in pixel_mask]))
-
     read_queue = Queue()
     result_queue = Queue()
     workers = []
@@ -140,6 +142,9 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     detector.deallocate_readers()
     for i in range(nproc):
         # TODO: serializatin of dark_average and pixel_mask is very slow.
+        # Testing showed that when flex.array_family was imported, serialization of NumPy
+        # arrays became slower (https://github.com/dials/dials/issues/2708).
+        # NumPy array backed by multiprocessing.shared_memory is much much faster.
         p = Process(target=queue_based_worker, args=(read_queue, result_queue, \
                     chunksize, detector, dtype, dark_average, pixel_mask, params))
         p.start()
@@ -151,13 +156,27 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     for tag, pulse_energy in zip(tags, pulse_energies):
         read_queue.put([tag, pulse_energy])
         i += 1
-        #if i > 200: break # DEBUG
+        if i > 100: break # DEBUG
     for i in range(nproc): read_queue.put(None)
 
     n_finished = 0
     n_hit = 0
     n_processed = 0
     h5out = h5py.File(output_filename, "a")
+
+    if use_nexus:
+        data_group = h5out["/entry/data"]
+        # The scale factor is unofficial at the moment. See https://github.com/nexusformat/definitions/pull/1343.
+        data_group.create_dataset("data_scale_factor", data=1.0 / adu_per_photon)
+        d = data_group.create_dataset("data", shape=(0, 0, 0), dtype=dtype, \
+                                      maxshape=(None, ysize * npanels, xsize), chunks=(1, chunksize[0], chunksize[1]), \
+                                      compression="gzip", shuffle=True)
+    #         compression=hdf5plugin.Blosc2(cname='blosclz', clevel=9, filters=hdf5plugin.Blosc2.BITSHUFFLE))
+    #         compression=hdf5plugin.BZip2())
+    #         compression=hdf5plugin.Bitshuffle(cname='zstd')) # zstd or lz4
+
+    hit_energies = []
+    hit_ids = []
     while n_finished < nproc:
         task = result_queue.get()
         if task is None:
@@ -168,10 +187,15 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
         n_processed += 1
 
         if image is not None:
-            g = h5out.create_group("tag-%d" % tag)
-            g.create_dataset("photon_energy_ev", data=pulse_energy)
-            d = g.create_dataset("data", (npanels * ysize, xsize), chunks=chunksize,
-                                 compression="gzip", compression_opts=compression_level, shuffle=True, dtype=dtype)
+            if use_nexus:
+                hit_ids.append(tag)
+                hit_energies.append(pulse_energy)
+                d.resize((n_hit + 1, ysize * npanels, xsize))
+            else:
+                g = h5out.create_group("tag-%d" % tag)
+                g.create_dataset("photon_energy_ev", data=pulse_energy)
+                d = g.create_dataset("data", (npanels * ysize, xsize), chunks=chunksize,
+                                     compression="gzip", compression_opts=compression_level, shuffle=True, dtype=dtype)
             chunkidx = 0
             for ip in range(cp):
                 for iy in range(cy):
@@ -179,10 +203,21 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
                         sy = iy * chunksize[0] + ip * ysize
                         sx = ix * chunksize[1]
 
-                        d.id.write_direct_chunk(offsets=(sy, sx), data= image[chunkidx], filter_mask=0)
+                        if use_nexus:
+                            d.id.write_direct_chunk(offsets=(n_hit, sy, sx), data=image[chunkidx], filter_mask=0)
+                        else:
+                            d.id.write_direct_chunk(offsets=(sy, sx), data=image[chunkidx], filter_mask=0)
+
                         chunkidx += 1
             n_hit += 1
         print(tag, n_spots)
+
+    if use_nexus:
+        h5out["/entry/data"].create_dataset("tag_id", data=hit_ids)
+        h5out["/entry/instrument/beam/incident_wavelength"].resize((n_hit,))
+        h5out["/entry/instrument/beam/incident_wavelength"][:] = [12398.4193 / e for e in hit_energies]
+        h5out["/entry/instrument/beam/incident_energy"].resize((n_hit,))
+        h5out["/entry/instrument/beam/incident_energy"][:] = hit_energies
 
     h5out.close()
     [t.join() for t in workers]

@@ -21,7 +21,7 @@ class FormatSACLAInMemory(FormatStill):
 
         self._mask = mask
         self._image = tuple(flex.float(buf) for buf in buffers)
-        self._beam = BeamFactory.simple(factor_ev_angstrom / energy) 
+        self._beam = BeamFactory.simple(factor_ev_angstrom / energy)
         self.setup_detector(geometry, distance, adu_per_photon)
 
     def setup_detector(self, geometry, distance, adu_per_photon):

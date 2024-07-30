@@ -40,10 +40,11 @@ from ostrich import VERSION
 #  Rotation is anti-clockwise.
 #  Thus, Z and X must be flipped for NeXus; X and Y for CBF/DIALS/dxtbx.
 
-def write_crystfel_geom(filename, geometry, energy, adu_per_photon, clen, runid):
+def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, clen, runid, beam_center):
     xsize = geometry.width
     ysize = geometry.height
     npanels = len(geometry.panels)
+    # TODO: use beam_center
 
     with open(filename, "w") as out:
         out.write("; CrystFEL geometry file produced by Ostrich version %d\n" % VERSION)
@@ -51,7 +52,17 @@ def write_crystfel_geom(filename, geometry, energy, adu_per_photon, clen, runid)
         # out.write("; for tiled but NOT reassembled images (512x8192 pixels)\n\n")
         out.write("clen = %.4f    ; %.1f mm camera length. You SHOULD optimize this!\n" % (clen * 1E-3, clen))
         out.write("res = %.1f     ; = 1 m / %.4f micron\n" % (1E6 / geometry.pixel_size, geometry.pixel_size))
-        out.write("data = /%/data\n")
+        if use_nexus:
+            out.write("data = /entry/data/data\n")
+            out.write("dim0 = %\n")
+            out.write("dim1 = ss\n")
+            out.write("dim2 = fs\n")
+            out.write("photon_energy = /entry/instrument/beam/incident_energy ; roughly %.1f eV\n" % energy) 
+        else:
+            out.write("data = /%/data\n")
+            out.write("photon_energy = /%%/photon_energy_ev ; roughly %.1f eV\n" % energy)
+        out.write("\n")
+
         out.write("; === Masks =========================\n")
         out.write(";  Unfortunately, this pixel mask does not work in earlier versions of CrystFEL.\n")
         out.write(";  CrystFEL 0.5 to 0.9: the mask is ignored because they request per-shot masks.\n")
@@ -59,7 +70,6 @@ def write_crystfel_geom(filename, geometry, energy, adu_per_photon, clen, runid)
         out.write("mask = /metadata/pixelmask\n")
         out.write("mask_good = 0x00\n")
         out.write("mask_bad = 0xFF\n")
-        out.write("photon_energy = /%%/photon_energy_ev ; roughly %.1f eV\n" % energy)
         out.write("\n")
 
         out.write("; Group definitions for geoptimiser\n")
@@ -174,6 +184,7 @@ def write_crystfel_geom(filename, geometry, energy, adu_per_photon, clen, runid)
                 out.write("badport7/max_ss = 7167\n")
                 out.write("badport7/panel  = q7\n\n")
 
+# WARNING: Deprecated. This does not support the beam center
 def write_cheetah_geom(filename, geometry):
     xsize = geometry.width
     ysize = geometry.height
@@ -190,7 +201,7 @@ def write_cheetah_geom(filename, geometry):
         detz = panel.pos_z * 1E-6
         rotation = panel.rotation
         pixel_size = geometry.pixel_size * 1E-6 # m
-        
+
         fast_x = math.cos(rotation) * pixel_size
         fast_y = math.sin(rotation) * pixel_size;
         slow_x = -math.sin(rotation) * pixel_size
@@ -256,7 +267,7 @@ def make_pixelmask(geometry, runid):
 
 def write_metadata(filename, geometry, clen, comment, runid, adu_per_photon, pixel_mask):
     f = h5py.File(filename, "w")
-   
+
     if adu_per_photon != 10.0:
         print("WARNING: DIALS assumes adu_per_photon is 10.0.")
         print("         Because you set it to be %f, you have to explicitly specify it during data processing." % adu_per_photon)
@@ -274,4 +285,112 @@ def write_metadata(filename, geometry, clen, comment, runid, adu_per_photon, pix
     f["/metadata/pixelsizey_in_um"] = [geometry.pixel_size] * len(geometry.panels)
     f["/metadata/distance_in_mm"] = clen
     f.create_dataset("/metadata/pixelmask", data=pixel_mask, compression="gzip", shuffle=True)
+    f.close()
+
+def write_nexus(filename, geometry, bl, runid, comment, start_time, end_time, clen, pixel_mask, beam_center):
+    xsize = geometry.width
+    ysize = geometry.height
+    npanels = len(geometry.panels)
+
+    f = h5py.File(filename, "w")
+
+    # Entry
+    entry = f.create_group("entry")
+    entry.attrs['NX_class'] = "NXentry"
+    entry.create_dataset("definition", data="NXmx")
+    entry.create_dataset("title", data="SFX dataset collected at SACLA BL%d" % bl)
+    entry.create_dataset("experiment_identifier", data="Run %d" %  runid)
+    entry.create_dataset("notes", data="Only hit images are recoded in this file.")
+    program_name = entry.create_dataset("program_name", data="Ostrich")
+    program_name.attrs['version'] = str(VERSION)
+
+    entry.create_dataset("start_time", data=start_time) # required
+    entry.create_dataset("end_time", data=end_time) # not required
+    entry.create_dataset("end_time_estimated", data=end_time) # this IS required
+
+    sample = entry.create_group("sample")
+    sample.attrs['NX_class'] = "NXsample"
+    sample.create_dataset("name", data="SFX microcrystals")
+    sample.create_dataset("depends_on", data=".")
+
+    instrument = entry.create_group("instrument")
+    instrument.attrs['NX_class'] = "NXinstrument"
+    instrument.create_dataset("name", data="SACLA BL%d" % bl)
+
+    # Beam
+    source = instrument.create_group("source")
+    source.attrs['NX_class'] = "NXsource"
+    source.create_dataset("type", data="Free-Electron Laser")
+    source.create_dataset("probe", data="x-ray")
+    source.create_dataset("frequency", data=30.0)
+
+    beam = instrument.create_group("beam")
+    beam.attrs['NX_class'] = "NXbeam"
+    incident_wavelength = beam.create_dataset("incident_wavelength", shape=(0,), maxshape=(None, ), dtype=np.float32)
+    incident_wavelength.attrs['units'] = "angstrom"
+    incident_energy = beam.create_dataset("incident_energy", shape=(0,), maxshape=(None, ), dtype=np.float32)
+    incident_energy.attrs['units'] = "eV"
+
+    # Detector
+    detector = instrument.create_group("detector")
+    detector.attrs['NX_class'] = "NXdetector"
+    detector.create_dataset("depends_on", data=".")
+    detector.create_dataset("description", data=geometry.name)
+    detector.create_dataset("pixel_mask_applied", data=0, dtype=np.int8) # data=True creates H5T_ENUM
+    detector.create_dataset("pixel_mask", dtype=np.uint32, data=pixel_mask, compression="gzip", shuffle=True)
+
+    sensor_material = detector.create_dataset("sensor_material", data="Si")
+    sensor_thickness = detector.create_dataset("sensor_thickness", data=geometry.thickness * 0.001)
+    sensor_thickness.attrs['units'] = 'mm'
+    # distance, beam_center_x/y are not mandatory because they will be derived from the transformation chain
+
+    transformations = detector.create_group("transformations")
+    transformations.attrs['NX__class'] = "NXtransformations"
+    whole = transformations.create_dataset("whole", data=clen)
+    whole.attrs['units'] = 'mm'
+    whole.attrs['transformation_type'] = "translation"
+    whole.attrs['vector'] = (0.0, 0.0, 1.0)
+    whole.attrs['offset'] = (beam_center[0], beam_center[1], 0.0)
+    whole.attrs['depends_on'] = '.'
+
+    # MPCCD does not have a panel hierarchy
+    if not geometry.name.startswith("MPCCD"):
+        for (group_name, members) in geometry.groups:
+            sensor_group= transformations.create_dataset(group_name, data=0.0)
+            sensor_group.attrs['units'] = 'degrees'
+            sensor_group.attrs['transformation_type'] = "rotation"
+            sensor_group.attrs['vector'] = (0.0, 0.0, -1.0)
+            sensor_group.attrs['offset'] = (0.0, 0.0, 0.0)
+            sensor_group.attrs['depends_on'] = '/entry/instrument/detector/transformations/whole'
+
+    for i, panel in enumerate(geometry.panels):
+        detector_module = detector.create_group(panel.name)
+        detector_module.attrs["NX_class"] = "NXdetector_module"
+        origin = (-panel.pos_x * 1E-3, panel.pos_y * 1E-3, -panel.pos_z * 1E-3)
+
+        parent_transform = "/entry/instrument/detector/transformations/whole"
+        if not geometry.name.startswith("MPCCD"):
+            for group_name, members in geometry.groups:
+                if panel.name in members:
+                    parent_transform = "/entry/instrument/detector/transformations/" + group_name
+                    break
+
+        fast_pixel_direction = detector_module.create_dataset("fast_pixel_direction", data=geometry.pixel_size * 1E-3)
+        fast_pixel_direction.attrs['units'] = 'mm'
+        fast_pixel_direction.attrs['vector'] = (-math.cos(panel.rotation), math.sin(panel.rotation), 0)
+        fast_pixel_direction.attrs['offset'] = origin
+        fast_pixel_direction.attrs['depends_on'] = parent_transform
+        slow_pixel_direction = detector_module.create_dataset("slow_pixel_direction", data=geometry.pixel_size * 1E-3)
+        slow_pixel_direction.attrs['units'] = 'mm'
+        slow_pixel_direction.attrs['vector'] = (-math.sin(panel.rotation), -math.cos(panel.rotation), 0)
+        slow_pixel_direction.attrs['offset'] = origin
+        slow_pixel_direction.attrs['depends_on'] = parent_transform
+        detector_module.create_dataset("data_size", data=(ysize, xsize))
+        detector_module.create_dataset("data_origin", data=(ysize * i, 0))
+
+    # Data
+    data_group = entry.create_group("data")
+    data_group.attrs['NX_class'] = "NXdata"
+    data_group.attrs['signal'] = "data"
+
     f.close()

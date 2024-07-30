@@ -74,7 +74,7 @@ def average_images(detector, tags, photon_energies, adu_per_photon, nproc=8):
             p = Process(target=add_image_par, args=(read_queue, result_queue, detector, adu_per_photon))
             p.start()
             workers.append(p)
-        
+
         for tag, energy in zip(tags, photon_energies):
             read_queue.put([tag, energy])
         for i in range(nproc):

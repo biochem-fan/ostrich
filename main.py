@@ -3,13 +3,9 @@
 # Ostrich for SACLA SFX data proprocessing
 # written by Takanori Nakane at Osaka University
 
-# - TODO: NeXus output
 # - TODO: GUI integration
-# - TODO: move this to command_line.py or something
-# - TODO: study shared memory approach
-#    e.g. https://stackoverflow.com/questions/37705974/why-are-multiprocessing-sharedctypes-assignments-so-slow
-#         https://qiita.com/kakinaguru_zo/items/f53e2485f15dd0d71f82
 
+import datetime
 import h5py
 import sys
 from multiprocessing import set_start_method, freeze_support
@@ -86,6 +82,7 @@ def run(params):
     clen = params.clen
     nproc = params.nproc
     adu_per_photon = params.adu_per_photon
+    use_nexus = params.nexus
 
     # Get Run info
     try:
@@ -95,11 +92,14 @@ def run(params):
     high_tag = dbpy.read_hightagnumber(bl, runid)
     comment = dbpy.read_comment(bl, runid)
     tags = dbpy.read_taglist_byrun(bl, runid)
+    start_time = datetime.datetime.fromtimestamp(dbpy.read_starttime(bl, runid), tz=datetime.timezone.utc).isoformat()
+    end_time = datetime.datetime.fromtimestamp(dbpy.read_stoptime(bl, runid), tz=datetime.timezone.utc).isoformat()
     print("Run %d: HighTag %d, Tags %d - %d (inclusive) with %d images" % (runid, high_tag, tags[0], tags[-1], len(tags)))
+    print("Run time: %s to %s" % (start_time, end_time))
     print("Comment: %s\n" % comment)
 
     # Find detectors
-    try: 
+    try:
         det_ids_all = dbpy.read_detidlist(bl, runid)
         print("Detector IDs: " + " ".join(det_ids_all))
         det_ids = filter_mpccd_octal(det_ids_all)
@@ -134,13 +134,25 @@ def run(params):
     print("Configured photon energy: %f eV\n" % config_photon_energy)
 
     # Create geometry files
-    write_crystfel_geom("%d.geom" % runid, detector.geometry, mean_energy, adu_per_photon, clen, runid)
+
+    # The origin of MPCCD panels is roughy the beam center but that of CITIUS
+    # is at the top left corner as of 2024A. This might change in the future.
+    if is_citius:
+        beam_center = (165.6, 206.9) # x, y in mm, NeXus-McStats system
+    else:
+        beam_center = (0.0, 0,0)
+
+    write_crystfel_geom("%d.geom" % runid, use_nexus, detector.geometry, mean_energy, adu_per_photon, clen, runid, beam_center)
     # write_cheetah_geom("%d-geom.h5" % runid, detector.geometry)
 
     # Write metadata
     pixel_mask = make_pixelmask(detector.geometry, runid)
     output_filename = "run%d-%s.h5" % (runid, params.runtype)
-    write_metadata(output_filename, detector.geometry, clen, comment, runid, adu_per_photon, pixel_mask)
+
+    if use_nexus:
+        write_nexus(output_filename, detector.geometry, bl, runid, comment, start_time, end_time, clen, pixel_mask, beam_center)
+    else:
+        write_metadata(output_filename, detector.geometry, clen, comment, runid, adu_per_photon, pixel_mask)
     print()
 
     # Make a boolean mask for DIALS hit finder
@@ -245,6 +257,10 @@ adu_per_photon = 10
  .help = Output value per photon
  .type = float(value_min=0.1, value_max = 100)
 
+nexus = True
+ .help = Output in the NeXus NXmx format (CITIUS images must be written in NXmx to be processed in DIALS)
+ .type = bool
+
 output {
     shoeboxes = False
         .type = bool
@@ -292,6 +308,7 @@ if __name__ == "__main__":
     print("Option: nproc             = %d" % params.nproc)
     print("Option: compression_level = %d" % params.compression_level)
     print("Option: adu_per_photon    = %.1f / photon" % params.adu_per_photon)
+    print("Option: nexus             = %s" % params.nexus)
     print()
 
     run(params)
