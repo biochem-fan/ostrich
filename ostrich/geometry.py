@@ -108,7 +108,7 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
             out.write("%s/corner_y = %f\n" % (name, dety / pixel_size)) # px
             out.write("%s/coffset = %f\n\n" % (name, detz * 1E-6)) # m
 
-        border, outer_border = get_border(geometry.panels[0].long_name)
+        border, outer_border = get_border(geometry.name)
         if border != 0:
             out.write("; Bad regions near edges of each sensor.\n")
             out.write(";  l: long axis, s: short axis\n")
@@ -219,6 +219,8 @@ def write_cheetah_geom(filename, geometry):
     f.create_dataset("z", data=posz, compression="gzip", shuffle=True)
     f.close()
 
+# Returns (border, outer_border)
+# outer_border is along the fast edge at the largest slow values
 def get_border(det_name):
     if re.match("MPCCD-8B0-2-007", det_name): # New Phase 3 detector
         return (5, 33) # based on 22Nov-Iwata @ 10keV
@@ -233,35 +235,42 @@ def get_border(det_name):
         return (5, 23) # based on 17Jul-P3Lys @ 10 keV
     elif re.match("MPCCD-8N", det_name): # Compact detector with amp shields
         return (0, 22) # based on 17Jul-Kuma @ 7 keV
+    elif re.match("CITIUS 20.2M", det_name): # based on 2024-Jul-12, 180 mm
+        return (1, 14)
     else:
         return (0, 0)
 
 def make_pixelmask(geometry, runid):
-    #TODO: In NeXus, the mask is uint32 with bit 1: dead, 2: cold, 3: hot, 4: noisy.
     xsize = geometry.width
     ysize = geometry.height
     npanels = len(geometry.panels)
 
-    det_name = geometry.panels[0].long_name
-    border, outer_border = get_border(det_name)
+    border, outer_border = get_border(geometry.name)
 
-    mask = np.zeros((ysize * npanels, xsize), dtype=np.uint16)
-    mask[:, 0:border] = 1
-    mask[:, (xsize - border):xsize] = 1
+    # NeXus bit masks
+    GAP = 1 # bit 0
+    DEAD = 2 # bit 1
+    COLD = 4 # bit 2
+    HOT = 8 # bit 3
+    NOISY = 16 # bit 4
+
+    mask = np.zeros((ysize * npanels, xsize), dtype=np.uint32)
+    mask[:, 0:border] = NOISY
+    mask[:, (xsize - border):xsize] = NOISY
 
     for i in range(npanels):
-        mask[(ysize * i):(ysize * i + border), :] = 1
-        mask[(ysize * (i + 1) - outer_border):(ysize * (i + 1)), :] = 1
+        mask[(ysize * i):(ysize * i + border), :] = NOISY
+        mask[(ysize * (i + 1) - outer_border):(ysize * (i + 1)), :] = COLD
 
-    if re.match("MPCCD-8B0-2-003", det_name): # Severly damaged Phase 3 detector
-        mask[1024:2048, 501:512] = 1
-        mask[2048:3072, 0:11] = 1
+    if re.match("MPCCD-8B0-2-003", geometry.name): # Severly damaged Phase 3 detector
+        mask[1024:2048, 501:512] = NOISY
+        mask[2048:3072, 0:11] = NOISY
 
         if runid >= 73832:
-            mask[1024:2048, 448:512] = 1
-            mask[2048:3072, 0:64] = 1
-            mask[5120:6144, 0:64] = 1
-            mask[6144:7168, 448:512] = 1
+            mask[1024:2048, 448:512] = NOISY
+            mask[2048:3072, 0:64] = NOISY
+            mask[5120:6144, 0:64] = NOISY
+            mask[6144:7168, 448:512] = NOISY
 
     return mask
 
