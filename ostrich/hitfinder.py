@@ -138,10 +138,19 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     result_queue = Queue()
     workers = []
 
+    # Send tasks first so that workers can start processing
+    # while other workers are being spawned.
+    i = 0
+    for tag, pulse_energy in zip(tags, pulse_energies):
+        read_queue.put([tag, pulse_energy])
+        i += 1
+        #if i > 100: break # DEBUG
+    for i in range(nproc): read_queue.put(None)
+
     # Create workers
     detector.deallocate_readers()
     for i in range(nproc):
-        # TODO: serializatin of dark_average and pixel_mask is very slow.
+        # TODO: serialization of dark_average and pixel_mask is very slow.
         # Testing showed that when flex.array_family was imported, serialization of NumPy
         # arrays became slower (https://github.com/dials/dials/issues/2708).
         # NumPy array backed by multiprocessing.shared_memory is much much faster.
@@ -150,14 +159,6 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
         p.start()
         print("Worker process", i, "started.")
         workers.append(p)
-
-    # Send tasks
-    i = 0
-    for tag, pulse_energy in zip(tags, pulse_energies):
-        read_queue.put([tag, pulse_energy])
-        i += 1
-        if i > 100: break # DEBUG
-    for i in range(nproc): read_queue.put(None)
 
     n_finished = 0
     n_hit = 0
@@ -210,7 +211,8 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
 
                         chunkidx += 1
             n_hit += 1
-        print(tag, n_spots)
+
+        print("%4d / %4d processed, %4d hits, current tag: %d with %d spot(s)" % (n_processed, len(tags), n_hit, tag, n_spots))
 
     if use_nexus:
         h5out["/entry/data"].create_dataset("tag_id", data=hit_ids)
