@@ -84,6 +84,10 @@ def run(params):
     adu_per_photon = params.adu_per_photon
     use_nexus = params.nexus
 
+    if not params.runtype.startswith("dark") and not params.runtype == "light":
+        if int(params.runtype) >= params.nblock:
+            raise ValueError("runtype must be 0, 1, 2, ..., (nblock - 1)")
+
     # Get Run info
     try:
         run_info = dbpy.read_runinfo(bl, runid)
