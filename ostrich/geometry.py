@@ -55,7 +55,7 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
             out.write("dim0 = %\n")
             out.write("dim1 = ss\n")
             out.write("dim2 = fs\n")
-            out.write("photon_energy = /entry/instrument/beam/incident_energy ; roughly %.1f eV\n" % energy) 
+            out.write("photon_energy = /entry/instrument/beam/incident_energy ; roughly %.1f eV\n" % energy)
         else:
             out.write("data = /%/data\n")
             out.write("photon_energy = /%%/photon_energy_ev ; roughly %.1f eV\n" % energy)

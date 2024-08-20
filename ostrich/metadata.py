@@ -18,13 +18,6 @@ def str2float(str):
 def syncdata2float(sensor, high_tag, tags):
     return [str2float(s) for s in dbpy.read_syncdatalist(sensor, high_tag, tags)]
 
-def filter_mpccd_octal(det_ids):
-    mpccds = sorted([x for x in det_ids if re.match("^MPCCD-8.*-[1-8]$", x)])
-    if len(mpccds) != 8:
-        raise RuntimeError("NoSupportedDetectorFound")
-
-    return mpccds
-
 def is_exposed(high_tag, tags, bl, runid):
     # Beamline specific constants
     if bl == 2:

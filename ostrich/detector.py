@@ -3,6 +3,7 @@
 
 from numpy import pi
 import ctdapy_xfel
+import re
 import stpy
 
 class DetectorPanel:
@@ -50,6 +51,41 @@ class Detector:
 class CITIUSDetector(Detector):
     def __init__(self, det_ids, bl, runid, first_tag):
         super().__init__(det_ids, bl, runid, first_tag)
+
+    def filter_prbs_by_roi(det_ids, roi="all"):
+        if roi == "all":
+            return det_ids
+        elif roi == "24":
+            within_roi = set([   19, 20, 21, 22,
+                                 25, 26, 27, 28,
+                                 31, 32, 33, 34,
+                                 37, 38, 39, 40,
+                                 43, 44, 45, 46,
+                                 49, 50, 51, 52])
+        elif roi == "40":
+            within_roi = set([   13, 14, 15, 16,
+                                 19, 20, 21, 22,
+                             24, 25, 26, 27, 28, 29,
+                             30, 31, 32, 33, 34, 35,
+                             36, 37, 38, 39, 40, 41,
+                             42, 43, 44, 45, 46, 47,
+                                 49, 50, 51, 52,
+                                 55, 56, 57, 58])
+        elif roi == "48":
+            within_roi = set([        8,  9,
+                                 13, 14, 15, 16,
+                             18, 19, 20, 21, 22, 23,
+                             24, 25, 26, 27, 28, 29,
+                             30, 31, 32, 33, 34, 35,
+                             36, 37, 38, 39, 40, 41,
+                             42, 43, 44, 45, 46, 47,
+                             48, 49, 50, 51, 52, 53,
+                                 55, 56, 57, 58,
+                                     62, 63])
+        else:
+             raise ValueError("CITIUIS ROI type must be one of all, 24, 40, 48")
+
+        return [x for x in det_ids if x in within_roi]
 
     def allocate_readers(self):
         # CITIUS API does not have readers
@@ -118,6 +154,13 @@ class CITIUSDetector(Detector):
 class MPCCDDetector(Detector):
     def __init__(self, det_ids, bl, runid, first_tag):
         super().__init__(det_ids, bl, runid, first_tag)
+
+    def filter_mpccd_octal(det_ids):
+        mpccds = sorted([x for x in det_ids if re.match("^MPCCD-8.*-[1-8]$", x)])
+        if len(mpccds) != 8:
+            raise RuntimeError("NoSupportedDetectorFound")
+
+        return mpccds
 
     def allocate_readers(self):
         if self.readers is not None:

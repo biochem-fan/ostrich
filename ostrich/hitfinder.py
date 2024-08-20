@@ -212,7 +212,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
                         chunkidx += 1
             n_hit += 1
 
-        print("%4d / %4d processed, %4d hits, current tag: %d with %d spot(s)" % (n_processed, len(tags), n_hit, tag, n_spots))
+        print("%4d / %4d processed, %4d hits, current tag = %d with %d spot(s)" % (n_processed, len(tags), n_hit, tag, n_spots))
 
     if use_nexus:
         h5out["/entry/data"].create_dataset("tag_id", data=hit_ids)

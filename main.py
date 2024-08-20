@@ -21,7 +21,7 @@ from ostrich.dark_average import average_images
 from ostrich.detector import CITIUSDetector, MPCCDDetector
 from ostrich.geometry import *
 from ostrich.hitfinder import find_hits
-from ostrich.metadata import filter_mpccd_octal, is_exposed, get_photon_energies, syncdata2float
+from ostrich.metadata import is_exposed, get_photon_energies, syncdata2float
 
 def classify_frames(params, high_tag, tags):
     # TODO: test time-resolved mode
@@ -82,6 +82,7 @@ def run(params):
     clen = params.clen
     nproc = params.nproc
     adu_per_photon = params.adu_per_photon
+    citius_roi = params.citius_roi
     use_nexus = params.nexus
 
     if not params.runtype.startswith("dark") and not params.runtype == "light":
@@ -106,13 +107,15 @@ def run(params):
     try:
         det_ids_all = dbpy.read_detidlist(bl, runid)
         print("Detector IDs: " + " ".join(det_ids_all))
-        det_ids = filter_mpccd_octal(det_ids_all)
+        det_ids = MPCCDDetector.filter_mpccd_octal(det_ids_all)
         print("MPCCD Octal IDs to use: " + " ".join(det_ids))
         is_citius = False
     except:
         ctrl_buf = ctdapy_xfel.CtrlBuffer(bl, runid)
-        det_ids = sorted(ctrl_buf.read_prbidlist())
-        print("CITIUS detector available PRB IDs:", det_ids)
+        det_ids_all = sorted(ctrl_buf.read_prbidlist())
+        print("CITIUS detector available PRB IDs:", det_ids_all)
+        det_ids = CITIUSDetector.filter_prbs_by_roi(det_ids_all, citius_roi)
+        print("CITIUS detector PRBs within the ROI:", det_ids)
         is_citius = True
     print()
 
@@ -261,6 +264,10 @@ adu_per_photon = 10
  .help = Output value per photon
  .type = float(value_min=0.1, value_max = 100)
 
+citius_roi = *all 24 40 48
+ .help = ROI for CITIUS detectors
+ .type = choice
+
 nexus = True
  .help = Output in the NeXus NXmx format (CITIUS images must be written in NXmx to be processed in DIALS)
  .type = bool
@@ -312,6 +319,7 @@ if __name__ == "__main__":
     print("Option: nproc             = %d" % params.nproc)
     print("Option: compression_level = %d" % params.compression_level)
     print("Option: adu_per_photon    = %.1f / photon" % params.adu_per_photon)
+    print("Option: citius_roi        = %s" % params.citius_roi)
     print("Option: nexus             = %s" % params.nexus)
     print()
 
