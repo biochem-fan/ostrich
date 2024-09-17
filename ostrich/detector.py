@@ -53,7 +53,7 @@ class CITIUSDetector(Detector):
         super().__init__(det_ids, bl, runid, first_tag)
 
     def filter_prbs_by_roi(det_ids, roi="all"):
-        if roi == "all":
+        if roi == "all" or roi == "72":
             return det_ids
         elif roi == "24":
             within_roi = set([   19, 20, 21, 22,

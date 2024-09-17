@@ -23,6 +23,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
     detector.allocate_readers()
     hit_threshold = params.hit_threshold
     adu_per_photon = params.adu_per_photon
+    hitfinding_roi = params.hitfinding_roi
 
     gains = [panel.gain for panel in detector.geometry.panels]
     xsize = detector.geometry.width
@@ -30,6 +31,11 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
     npanels = len(detector.geometry.panels)
     cp, cy, cx = (npanels, ysize // chunksize[0], xsize // chunksize[1])
     compression_level = params.compression_level
+    is_citius = isinstance(detector, CITIUSDetector)
+
+    if is_citius:
+        hitfinding_panels = CITIUSDetector.filter_prbs_by_roi(detector.det_ids, hitfinding_roi)
+        in_hitfinding_roi = [det_id in hitfinding_panels for det_id in detector.det_ids]
 
     # Convert the pixel_mask to DIALS's flex array
     if pixel_mask is not None:
@@ -43,7 +49,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
             break
         tag, pulse_energy = task
 
-        if isinstance(detector, MPCCDDetector):
+        if not is_citius:
             for reader, buf in zip(detector.readers, detector.buffers):
                 reader.collect(buf, tag)
 
@@ -59,18 +65,22 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
             image_buf = [buf.read_det_data(0) * (gain * 3.65 * adu_per_photon / pulse_energy) - dark \
                          for gain, buf, dark in zip(gains, detector.buffers, dark_average)]
         else:
-            image_buf = [detector.buffers.read_image(panel.index, tag) * (adu_per_photon * 3.65 / pulse_energy) \
-                       for panel in detector.geometry.panels]
+            image_buf = [None] * len(detector.geometry.panels)
+
+            for i, panel in enumerate(detector.geometry.panels):
+                if not in_hitfinding_roi[i]:
+                    continue
+
+                image_buf[i] = detector.buffers.read_image(panel.index, tag) * (adu_per_photon * 3.65 / pulse_energy)
 
         if False: # skip DIALS
             print(tag)
             continue
 
-        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, adu_per_photon, distance=params.clen)
+        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, adu_per_photon, masks=pixel_mask, distance=params.clen)
         imageset = ImageSet(ImageSetData(MemReader([image,]), None))
         imageset.set_beam(image.get_beam())
         imageset.set_detector(image.get_detector())
-        imageset.external_lookup.mask.data = pixel_mask
         experiments = ExperimentListFactory.from_imageset_and_crystal(imageset, None)
 
         if False: # skip spot-finding
@@ -83,6 +93,13 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
         if len(xyzobs) < hit_threshold:
             result_queue.put([tag, len(xyzobs), pulse_energy, None])
             continue
+
+        # Read missing panels (only for CITIUS)
+        for i, panel in enumerate(detector.geometry.panels):
+            if not is_citius or in_hitfinding_roi[i]:
+                continue
+
+            image_buf[i] = detector.buffers.read_image(panel.index, tag) * (adu_per_photon * 3.65 / pulse_energy)
 
         # shuffle and compress in workers (see my PR https://github.com/keitaroyam/cheetah/pull/1)
         chunkidx = 0
@@ -144,7 +161,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     for tag, pulse_energy in zip(tags, pulse_energies):
         read_queue.put([tag, pulse_energy])
         i += 1
-        #if i > 100: break # DEBUG
+#        if i > 30: break # DEBUG
     for i in range(nproc): read_queue.put(None)
 
     # Create workers

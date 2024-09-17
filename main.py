@@ -3,7 +3,11 @@
 # Ostrich for SACLA SFX data proprocessing
 # written by Takanori Nakane at Osaka University
 
-# - TODO: GUI integration
+# TODO: GUI integration
+# TODO: Binning
+#       Where/Whether should we modify the geometry?
+#       pixel_size is doubled, posx/posy are halved and TRUNCATED,
+#       border width is halved and then CEILED.
 
 import datetime
 import h5py
@@ -216,7 +220,7 @@ clen = 50.0
  .help = Detector distance in millimeter
  .type = float(value_min = 0)
 
-pd1_thresh = 0.1
+pd1_thresh = 0
  .help = Threshold for photodiode 1 (pd1_name) for light. Set 0 to ignore this photodide.
  .type = float
 
@@ -266,6 +270,10 @@ adu_per_photon = 10
 
 citius_roi = *all 24 40 48
  .help = ROI for CITIUS detectors
+ .type = choice
+
+hitfinding_roi = *all 24 40 48
+ .help = ROI used for hit finding (only for CITIUS detectors)
  .type = choice
 
 nexus = True
@@ -320,6 +328,7 @@ if __name__ == "__main__":
     print("Option: compression_level = %d" % params.compression_level)
     print("Option: adu_per_photon    = %.1f / photon" % params.adu_per_photon)
     print("Option: citius_roi        = %s" % params.citius_roi)
+    print("Option: hitfinding_roi    = %s" % params.hitfinding_roi)
     print("Option: nexus             = %s" % params.nexus)
     print()
 

@@ -14,13 +14,17 @@ from dxtbx.format.FormatStill import FormatStill
 from scitbx import matrix
 
 class FormatSACLAInMemory(FormatStill):
-    def __init__(self, buffers, geometry, energy, adu_per_photon, mask=None, distance=50.0):
+    def __init__(self, buffers, geometry, energy, adu_per_photon, masks=None, distance=50.0):
         assert len(buffers) == len(geometry.panels)
-        if mask is not None:
-            assert len(mask) == len(geometry.panels)
+        if masks is not None:
+            assert len(masks) == len(geometry.panels)
 
-        self._mask = mask
-        self._image = tuple(flex.float(buf) for buf in buffers)
+        self.invalid_panels = [buf is None for buf in buffers]
+        if masks is not None:
+            self._mask = tuple(mask for mask, buf in zip(masks, buffers) if buf is not None)
+        else:
+            self._mask = None
+        self._image = tuple(flex.float(buf) for buf in buffers if buf is not None)
         self._beam = BeamFactory.simple(factor_ev_angstrom / energy)
         self.setup_detector(geometry, distance, adu_per_photon)
 
@@ -43,6 +47,9 @@ class FormatSACLAInMemory(FormatStill):
                        ( 0, 0, -distance))
 
         for i, panel in enumerate(geometry.panels):
+            if self.invalid_panels[i]:
+                continue
+
             angle = panel.rotation
             # The sign before cosines is the opposite of my old Cheetah & dxtbx class
             # but I believe this is correct.
