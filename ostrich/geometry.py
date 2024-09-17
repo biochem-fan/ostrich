@@ -351,6 +351,7 @@ def write_nexus(filename, geometry, bl, runid, comment, start_time, end_time, cl
     detector.create_dataset("description", data=geometry.name)
     detector.create_dataset("pixel_mask_applied", data=0, dtype=np.int8) # data=True creates H5T_ENUM
     detector.create_dataset("pixel_mask", dtype=np.uint32, data=pixel_mask, compression="gzip", shuffle=True)
+    detector["data"] = h5py.SoftLink('/entry/data/data')
 
     sensor_material = detector.create_dataset("sensor_material", data="Si")
     sensor_thickness = detector.create_dataset("sensor_thickness", data=geometry.thickness * 0.001)
