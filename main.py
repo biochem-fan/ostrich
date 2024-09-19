@@ -4,7 +4,6 @@
 # written by Takanori Nakane at Osaka University
 
 # TODO: GUI integration
-# TODO: Binning
 #       Where/Whether should we modify the geometry?
 #       pixel_size is doubled, posx/posy are halved and TRUNCATED,
 #       border width is halved and then CEILED.
@@ -87,11 +86,15 @@ def run(params):
     nproc = params.nproc
     adu_per_photon = params.adu_per_photon
     citius_roi = params.citius_roi
+    binning = params.binning
     use_nexus = params.nexus
 
     if not params.runtype.startswith("dark") and not params.runtype == "light":
         if int(params.runtype) >= params.nblock:
             raise ValueError("runtype must be 0, 1, 2, ..., (nblock - 1)")
+
+    if binning != 1 and not use_nexus:
+        raise ValueError("binning is available only for NXmx output")
 
     # Get Run info
     try:
@@ -153,20 +156,24 @@ def run(params):
     else:
         beam_center = (0.0, 0,0)
 
-    write_crystfel_geom("%d.geom" % runid, use_nexus, detector.geometry, mean_energy, adu_per_photon, clen, runid, beam_center)
+    write_crystfel_geom("%d.geom" % runid, use_nexus, detector.geometry, mean_energy, adu_per_photon, clen, runid, beam_center, binning)
     # write_cheetah_geom("%d-geom.h5" % runid, detector.geometry)
 
     # Write metadata
     pixel_mask = make_pixelmask(detector.geometry, runid)
-    output_filename = "run%d-%s.h5" % (runid, params.runtype)
-
-    if use_nexus:
-        write_nexus(output_filename, detector.geometry, bl, runid, comment, start_time, end_time, clen, pixel_mask, beam_center)
+    if binning != 1:
+        binned_pixel_mask = make_pixelmask(detector.geometry, runid, binning)
     else:
-        write_metadata(output_filename, detector.geometry, clen, comment, runid, adu_per_photon, pixel_mask)
+        binned_pixel_mask = pixel_mask
+
+    output_filename = "run%d-%s.h5" % (runid, params.runtype)
+    if use_nexus:
+        write_nexus(output_filename, detector.geometry, bl, runid, comment, start_time, end_time, clen, binned_pixel_mask, beam_center, binning)
+    else:
+        write_metadata(output_filename, detector.geometry, clen, comment, runid, adu_per_photon, binned_pixel_mask)
     print()
 
-    # Make a boolean mask for DIALS hit finder
+    # Make a boolean mask for DIALS hit finder. Note that hit finder uses non-binned images.
     pixel_mask = np.split(pixel_mask == 0, len(detector.geometry.panels), axis=0)
 
     # Create dark average
@@ -276,6 +283,10 @@ hitfinding_roi = *all 24 40 48
  .help = ROI used for hit finding (only for CITIUS detectors)
  .type = choice
 
+binning = 1
+ .help = Binning (1 = no binning, 2 = half size)
+ .type = int(value_min = 1, value_max = 2)
+
 nexus = True
  .help = Output in the NeXus NXmx format (CITIUS images must be written in NXmx to be processed in DIALS)
  .type = bool
@@ -329,6 +340,7 @@ if __name__ == "__main__":
     print("Option: adu_per_photon    = %.1f / photon" % params.adu_per_photon)
     print("Option: citius_roi        = %s" % params.citius_roi)
     print("Option: hitfinding_roi    = %s" % params.hitfinding_roi)
+    print("Option: binning           = %d" % params.binning)
     print("Option: nexus             = %s" % params.nexus)
     print()
 

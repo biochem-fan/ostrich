@@ -6,6 +6,14 @@ import ctdapy_xfel
 import re
 import stpy
 
+def bin_image(img, binning):
+    assert img.ndim == 2
+    assert img.shape[0] % binning == 0
+    assert img.shape[1] % binning == 0
+
+    # cf. https://stackoverflow.com/a/36102436/23975867
+    return img.reshape(img.shape[0] // binning, binning, img.shape[1] // binning, binning).sum(axis=3).sum(axis=1)
+
 class DetectorPanel:
     def __init__(self):
         self.name = ""

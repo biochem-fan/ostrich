@@ -40,16 +40,20 @@ from ostrich import VERSION
 #  Rotation is anti-clockwise.
 #  Thus, Z and X must be flipped for NeXus; X and Y for CBF/DIALS/dxtbx.
 
-def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, clen, runid, beam_center):
-    xsize = geometry.width
-    ysize = geometry.height
+def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, clen, runid, beam_center, binning=1):
+    assert geometry.width % binning == 0
+    assert geometry.height % binning == 0
+
+    xsize = geometry.width // binning
+    ysize = geometry.height // binning
+    pixel_size = geometry.pixel_size * binning
     npanels = len(geometry.panels)
 
     with open(filename, "w") as out:
         out.write("; CrystFEL geometry file produced by Ostrich version %d\n" % VERSION)
         out.write(";   Takanori Nakane (tnakane.protein@osaka-u.ac.jp)\n")
         out.write("clen = %.4f    ; %.1f mm camera length. You SHOULD optimize this!\n" % (clen * 1E-3, clen))
-        out.write("res = %.1f     ; = 1 m / %.4f micron\n" % (1E6 / geometry.pixel_size, geometry.pixel_size))
+        out.write("res = %.1f     ; = 1 m / %.4f micron (binning %d) \n" % (1E6 / pixel_size, pixel_size, binning))
         if use_nexus:
             out.write("data = /entry/data/data\n")
             out.write("dim0 = %\n")
@@ -92,7 +96,6 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
             dety = panel.pos_y
             detz = panel.pos_z
             rotation = panel.rotation
-            pixel_size = geometry.pixel_size
             print("panel %s gain %f pos (%f, %f, %f) rotation %f energy %f" % (name, gain, detx, dety, detz, rotation, energy))
 
             out.write("; sensor %s\n" % panel.long_name)
@@ -110,6 +113,8 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
             out.write("%s/coffset = %f\n\n" % (name, detz * 1E-6)) # m
 
         border, outer_border = get_border(geometry.name)
+        border = int(np.ceil(border / binning))
+        outer_border = int(np.ceil(outer_border / binning))
         if border != 0:
             out.write("; Bad regions near edges of each sensor.\n")
             out.write(";  l: long axis, s: short axis\n")
@@ -149,6 +154,8 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
 
         # Probably this should be moved to the detector class.
         if re.match("MPCCD-8B0-2-003", geometry.panels[0].long_name):
+            assert binning == 1
+
             out.write("; Severly damaged Phase 3 detector\n")
             out.write("baddamage1/min_fs = 501\n")
             out.write("baddamage1/max_fs = 511\n")
@@ -189,9 +196,13 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
                 out.write("badport7/panel  = q7\n\n")
 
 # WARNING: Deprecated. This does not support the beam center
-def write_cheetah_geom(filename, geometry):
-    xsize = geometry.width
-    ysize = geometry.height
+def write_cheetah_geom(filename, geometry, binning=1):
+    assert geometry.width % binning == 0
+    assert geometry.height % binning == 0
+
+    xsize = geometry.width // binning
+    ysize = geometry.height // binning
+    pixel_size = geometry.pixel_size * binning
 
     npanels = len(geometry.panels)
     posx = np.zeros((ysize * npanels, xsize), dtype=np.float32)
@@ -204,7 +215,7 @@ def write_cheetah_geom(filename, geometry):
         dety = panel.pos_y * 1E-6
         detz = panel.pos_z * 1E-6
         rotation = panel.rotation
-        pixel_size = geometry.pixel_size * 1E-6 # m
+        pixel_size *= 1E-6 # m
 
         fast_x = math.cos(rotation) * pixel_size
         fast_y = math.sin(rotation) * pixel_size;
@@ -244,12 +255,18 @@ def get_border(det_name):
     else:
         return (0, 0)
 
-def make_pixelmask(geometry, runid):
-    xsize = geometry.width
-    ysize = geometry.height
+# This returns a non-binned mask, because it is used for in-memory hitfinding.
+def make_pixelmask(geometry, runid, binning=1):
+    assert geometry.width % binning == 0
+    assert geometry.height % binning == 0
+
+    xsize = geometry.width // binning
+    ysize = geometry.height // binning
     npanels = len(geometry.panels)
 
     border, outer_border = get_border(geometry.name)
+    border = int(np.ceil(border / binning))
+    outer_border = int(np.ceil(outer_border / binning))
 
     # NeXus bit masks
     GAP = 1 # bit 0
@@ -267,6 +284,7 @@ def make_pixelmask(geometry, runid):
         mask[(ysize * (i + 1) - outer_border):(ysize * (i + 1)), :] = COLD
 
     if re.match("MPCCD-8B0-2-003", geometry.name): # Severly damaged Phase 3 detector
+        assert binning == 1
         mask[1024:2048, 501:512] = NOISY
         mask[2048:3072, 0:11] = NOISY
 
@@ -278,8 +296,11 @@ def make_pixelmask(geometry, runid):
 
     return mask
 
+# We don't support binning here, because our MPCCD dxtbx class does not support it anyway.
 def write_metadata(filename, geometry, clen, comment, runid, adu_per_photon, pixel_mask):
     f = h5py.File(filename, "w")
+
+    pixel_size = geometry.pixel_size
 
     if adu_per_photon != 10.0:
         print("WARNING: DIALS assumes adu_per_photon is 10.0.")
@@ -294,16 +315,22 @@ def write_metadata(filename, geometry, clen, comment, runid, adu_per_photon, pix
     # Although this field name is angles_in_RAD, the dxtbx class interprets it as degrees...
     # For compatibility, we keep it as is.
     f["/metadata/angle_in_rad"] = [panel.rotation * (180.0 / math.pi) for panel in geometry.panels]
-    f["/metadata/pixelsizex_in_um"] = [geometry.pixel_size] * len(geometry.panels)
-    f["/metadata/pixelsizey_in_um"] = [geometry.pixel_size] * len(geometry.panels)
+    f["/metadata/pixelsizex_in_um"] = [pixel_size] * len(geometry.panels)
+    f["/metadata/pixelsizey_in_um"] = [pixel_size] * len(geometry.panels)
     f["/metadata/distance_in_mm"] = clen
     f.create_dataset("/metadata/pixelmask", data=pixel_mask, compression="gzip", shuffle=True)
     f.close()
 
-def write_nexus(filename, geometry, bl, runid, comment, start_time, end_time, clen, pixel_mask, beam_center):
-    xsize = geometry.width
-    ysize = geometry.height
+def write_nexus(filename, geometry, bl, runid, comment, start_time, end_time, clen, pixel_mask, beam_center, binning=1):
+    assert geometry.width % binning == 0
+    assert geometry.height % binning == 0
+
+    xsize = geometry.width // binning
+    ysize = geometry.height // binning
+    pixel_size = geometry.pixel_size * binning
     npanels = len(geometry.panels)
+
+    assert pixel_mask.shape == (ysize * npanels, xsize)
 
     f = h5py.File(filename, "w")
 
@@ -313,7 +340,7 @@ def write_nexus(filename, geometry, bl, runid, comment, start_time, end_time, cl
     entry.create_dataset("definition", data="NXmx")
     entry.create_dataset("title", data="SFX dataset collected at SACLA BL%d" % bl)
     entry.create_dataset("experiment_identifier", data="Run %d" %  runid)
-    entry.create_dataset("notes", data="Only hit images are recoded in this file.")
+    entry.create_dataset("notes", data="Only hit images are recoded in this file. Bin %d." % binning)
     program_name = entry.create_dataset("program_name", data="Ostrich")
     program_name.attrs['version'] = str(VERSION)
 
@@ -389,12 +416,12 @@ def write_nexus(filename, geometry, bl, runid, comment, start_time, end_time, cl
                     parent_transform = "/entry/instrument/detector/transformations/" + group_name
                     break
 
-        fast_pixel_direction = detector_module.create_dataset("fast_pixel_direction", data=geometry.pixel_size * 1E-3)
+        fast_pixel_direction = detector_module.create_dataset("fast_pixel_direction", data=pixel_size * 1E-3)
         fast_pixel_direction.attrs['units'] = 'mm'
         fast_pixel_direction.attrs['vector'] = (-math.cos(panel.rotation), math.sin(panel.rotation), 0)
         fast_pixel_direction.attrs['offset'] = origin
         fast_pixel_direction.attrs['depends_on'] = parent_transform
-        slow_pixel_direction = detector_module.create_dataset("slow_pixel_direction", data=geometry.pixel_size * 1E-3)
+        slow_pixel_direction = detector_module.create_dataset("slow_pixel_direction", data=pixel_size * 1E-3)
         slow_pixel_direction.attrs['units'] = 'mm'
         slow_pixel_direction.attrs['vector'] = (-math.sin(panel.rotation), -math.cos(panel.rotation), 0)
         slow_pixel_direction.attrs['offset'] = origin

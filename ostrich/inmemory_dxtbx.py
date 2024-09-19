@@ -14,7 +14,7 @@ from dxtbx.format.FormatStill import FormatStill
 from scitbx import matrix
 
 class FormatSACLAInMemory(FormatStill):
-    def __init__(self, buffers, geometry, energy, adu_per_photon, masks=None, distance=50.0):
+    def __init__(self, buffers, geometry, energy, adu_per_photon, masks=None, distance=50.0, binning=1):
         assert len(buffers) == len(geometry.panels)
         if masks is not None:
             assert len(masks) == len(geometry.panels)
@@ -26,9 +26,12 @@ class FormatSACLAInMemory(FormatStill):
             self._mask = None
         self._image = tuple(flex.float(buf) for buf in buffers if buf is not None)
         self._beam = BeamFactory.simple(factor_ev_angstrom / energy)
-        self.setup_detector(geometry, distance, adu_per_photon)
+        self.setup_detector(geometry, distance, adu_per_photon, binning)
 
-    def setup_detector(self, geometry, distance, adu_per_photon):
+    def setup_detector(self, geometry, distance, adu_per_photon, binning):
+        assert geometry.width % binning == 0
+        assert geometry.height % binning == 0
+
         wavelength = self.get_beam().get_wavelength()
 
         table = attenuation_coefficient.get_table("Si")
@@ -63,10 +66,10 @@ class FormatSACLAInMemory(FormatStill):
             p = root.add_panel()
             p.set_type("SENSOR_PAD")
             p.set_name('Panel%d' % i)
-            p.set_image_size((geometry.width, geometry.height))
+            p.set_image_size((geometry.width // binning, geometry.height // binning))
             # we don't really apply saturation cutoff
             p.set_trusted_range((-10 * adu_per_photon, 65535 * adu_per_photon))
-            p.set_pixel_size((geometry.pixel_size, geometry.pixel_size))
+            p.set_pixel_size((geometry.pixel_size * binning, geometry.pixel_size * binning))
             p.set_thickness(geometry.thickness)
             p.set_local_frame(fast.elems, slow.elems, origin.elems)
             p.set_px_mm_strategy(px_mm)

@@ -14,7 +14,7 @@ from dxtbx.imageset import ImageSet, ImageSetData, MemReader
 from dxtbx.model.experiment_list import ExperimentListFactory
 from scitbx import matrix
 
-from ostrich.detector import CITIUSDetector, MPCCDDetector
+from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image
 
 def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dark_average, pixel_mask, params):
     from dials.array_family import flex
@@ -24,10 +24,14 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
     hit_threshold = params.hit_threshold
     adu_per_photon = params.adu_per_photon
     hitfinding_roi = params.hitfinding_roi
+    binning = params.binning
 
+    assert detector.geometry.width % binning == 0
+    assert detector.geometry.height % binning == 0
+
+    xsize = detector.geometry.width // binning
+    ysize = detector.geometry.height // binning
     gains = [panel.gain for panel in detector.geometry.panels]
-    xsize = detector.geometry.width
-    ysize = detector.geometry.height
     npanels = len(detector.geometry.panels)
     cp, cy, cx = (npanels, ysize // chunksize[0], xsize // chunksize[1])
     compression_level = params.compression_level
@@ -77,6 +81,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
             print(tag)
             continue
 
+        # Images are NOT binned yet!
         image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, adu_per_photon, masks=pixel_mask, distance=params.clen)
         imageset = ImageSet(ImageSetData(MemReader([image,]), None))
         imageset.set_beam(image.get_beam())
@@ -89,7 +94,6 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
 
         observed = flex.reflection_table.from_observations(experiments, params, is_stills=True)
         xyzobs = observed['xyzobs.px.value']
-        # print(tag, len(xyzobs))
         if len(xyzobs) < hit_threshold:
             result_queue.put([tag, len(xyzobs), pulse_energy, None])
             continue
@@ -98,8 +102,10 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
         for i, panel in enumerate(detector.geometry.panels):
             if not is_citius or in_hitfinding_roi[i]:
                 continue
-
             image_buf[i] = detector.buffers.read_image(panel.index, tag) * (adu_per_photon * 3.65 / pulse_energy)
+
+        if binning != 1:
+            image_buf = [bin_image(img, binning) for img in image_buf]
 
         # shuffle and compress in workers (see my PR https://github.com/keitaroyam/cheetah/pull/1)
         chunkidx = 0
@@ -129,11 +135,15 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     hit_threshold = params.hit_threshold
     adu_per_photon = params.adu_per_photon
     use_nexus = params.nexus
+    binning = params.binning
     is_citius = isinstance(detector, CITIUSDetector)
 
+    assert detector.geometry.width % binning == 0
+    assert detector.geometry.height % binning == 0
+
+    xsize = detector.geometry.width // binning
+    ysize = detector.geometry.height // binning
     gains = [panel.gain for panel in detector.geometry.panels]
-    xsize = detector.geometry.width
-    ysize = detector.geometry.height
     npanels = len(detector.geometry.panels)
 
     if is_citius:
@@ -161,7 +171,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     for tag, pulse_energy in zip(tags, pulse_energies):
         read_queue.put([tag, pulse_energy])
         i += 1
-#        if i > 30: break # DEBUG
+        #if i > 300: break # DEBUG
     for i in range(nproc): read_queue.put(None)
 
     # Create workers
