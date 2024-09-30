@@ -14,6 +14,7 @@ from dxtbx.imageset import ImageSet, ImageSetData, MemReader
 from dxtbx.model.experiment_list import ExperimentListFactory
 from scitbx import matrix
 
+from ostrich import update_status
 from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image
 
 def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dark_average, pixel_mask, params):
@@ -140,6 +141,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     adu_per_photon = params.adu_per_photon
     use_nexus = params.nexus
     binning = params.binning
+    status = params.status
     is_citius = isinstance(detector, CITIUSDetector)
 
     assert detector.geometry.width % binning == 0
@@ -175,7 +177,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     for tag, pulse_energy in zip(tags, pulse_energies):
         read_queue.put([tag, pulse_energy])
         i += 1
-        #if i > 300: break # DEBUG
+#        if i > 99: break # DEBUG
     for i in range(nproc): read_queue.put(None)
 
     # Create workers
@@ -243,6 +245,9 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
                         chunkidx += 1
             n_hit += 1
 
+        # TODO: deal with "Processed"; this must include LLF failed
+        if n_processed % 10 == 0:
+             update_status(status, "Total=%d,Processed=%d,LLFpassed=%d,Hits=%ld,Status=Hitfinding" % (len(pulse_energies), n_processed, n_processed, n_hit))
         print("%4d / %4d processed, %4d hits, current tag = %d with %d spot(s)" % (n_processed, len(tags), n_hit, tag, n_spots))
 
     if use_nexus:
@@ -257,3 +262,4 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     read_queue.close()
     result_queue.close()
     print("%d Hit / %d Processed." % (n_hit, n_processed))
+    update_status(status, "Total=%d,Processed=%d,LLFpassed=%d,Hits=%ld,Status=Finished" % (len(pulse_energies), n_processed, n_processed, n_hit))

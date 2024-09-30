@@ -3,11 +3,6 @@
 # Ostrich for SACLA SFX data proprocessing
 # written by Takanori Nakane at Osaka University
 
-# TODO: GUI integration
-#       Where/Whether should we modify the geometry?
-#       pixel_size is doubled, posx/posy are halved and TRUNCATED,
-#       border width is halved and then CEILED.
-
 import datetime
 import h5py
 import sys
@@ -84,6 +79,7 @@ def run(params):
     bl = params.bl
     clen = params.clen
     nproc = params.nproc
+    status = params.status
     adu_per_photon = params.adu_per_photon
     citius_roi = params.citius_roi
     binning = params.binning
@@ -181,7 +177,7 @@ def run(params):
     if not is_citius:
         print("Calculating a dark average over %d images:\n" % len(calib_images))
         photon_energies_calib = pulse_energies[np.logical_not(exposed)]
-        dark_average = average_images(detector, calib_images, photon_energies_calib, adu_per_photon, nproc)
+        dark_average = average_images(detector, calib_images, photon_energies_calib, adu_per_photon, status, nproc)
 
         if False:
             f = h5py.File("%d-dark.h5" % runid, "w")
@@ -263,6 +259,10 @@ nblock = 3
  .help = Number of parallelization blocks (ignored in TR-SFX)
  .type = int(value_min = 1, value_max = 5)
 
+status = ""
+ .help = File name for status log (for integration with Ostrich Dispatcher GUI)
+ .type = str
+
 nproc = 8
  .help = Number of processes
  .type = int(value_min = 1, value_max = 48)
@@ -336,6 +336,7 @@ if __name__ == "__main__":
     print("Option: hit_threshold     = %d" % params.hit_threshold)
     print("Option: runtype           = %s" % params.runtype)
     print("Option: nproc             = %d" % params.nproc)
+    print("Option: status            = %s" % params.status)
     print("Option: compression_level = %d" % params.compression_level)
     print("Option: adu_per_photon    = %.1f / photon" % params.adu_per_photon)
     print("Option: citius_roi        = %s" % params.citius_roi)

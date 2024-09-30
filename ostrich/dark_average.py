@@ -3,6 +3,7 @@
 
 from multiprocessing import Process, Queue
 import numpy as np
+from ostrich import update_status
 
 import stpy
 
@@ -32,10 +33,11 @@ def add_image_par(read_queue, result_queue, detector, adu_per_photon):
                     local_buffer[(ysize * i):(ysize * (i + 1)),] += data
             except Exception as e:
                 print(e)
-                continue # FIXME: report error
+                continue # TODO: FIXME: report error
             local_n_added += 1
+            result_queue.put(("ONE_IMAGE", ))
 
-def average_images(detector, tags, photon_energies, adu_per_photon, nproc=8):
+def average_images(detector, tags, photon_energies, adu_per_photon, status, nproc=8):
     xsize = detector.geometry.width
     ysize = detector.geometry.height
     npanels = len(detector.geometry.panels)
@@ -61,9 +63,8 @@ def average_images(detector, tags, photon_energies, adu_per_photon, nproc=8):
 
         for idx, tag in enumerate(tags):
             print("Processing tag %d (%2.1f%% done)" % (tag, 100.0 * (idx + 1) / len(tags)))
-            if (idx % 5 == 0):
-                with open("status.txt", "w") as status:
-                    status.write("Status: Total=%d,Processed=%d,Status=DarkAveraging\n" % (len(tags), idx + 1))
+            if idx % 5 == 0:
+                update_status(status, "Total=%d,Processed=%d,Status=DarkAveraging\n" % (len(tags), idx + 1))
             n_added += add_image(tag, photon_energies[idx])
     else:
         read_queue = Queue()
@@ -80,13 +81,19 @@ def average_images(detector, tags, photon_energies, adu_per_photon, nproc=8):
         for i in range(nproc):
             read_queue.put(None)
 
-        n_finished = 0
-        while n_finished < nproc:
-            local_buffer, local_n_added = result_queue.get()
-            print(local_n_added)
+        n_finished_workers = 0
+        n_processed_images = 0
+        while n_finished_workers < nproc:
+            msg = result_queue.get()
+            if len(msg) == 1:
+                n_processed_images += 1
+                if n_processed_images % 5 == 0:
+                    update_status(status, "Total=%d,Processed=%d,Status=DarkAveraging\n" % (len(tags), n_processed_images))
+                continue
+            local_buffer, local_n_added = msg
             sum_buffer += local_buffer
             n_added += local_n_added
-            n_finished += 1
+            n_finished_workers += 1
 
         [t.join() for t in workers]
         read_queue.close()
