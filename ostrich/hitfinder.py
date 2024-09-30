@@ -43,7 +43,8 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
 
     # Convert the pixel_mask to DIALS's flex array
     if pixel_mask is not None:
-        assert len(pixel_mask) == npanels
+        if is_citius:
+            pixel_mask = [mask for mask, valid in zip(pixel_mask, in_hitfinding_roi) if valid]
         pixel_mask = ImageBool(tuple([flex.bool(m) for m in pixel_mask]))
 
     while True:
@@ -82,10 +83,13 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
             continue
 
         # Images are NOT binned yet!
-        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, adu_per_photon, masks=pixel_mask, distance=params.clen)
+        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, adu_per_photon, distance=params.clen)
         imageset = ImageSet(ImageSetData(MemReader([image,]), None))
         imageset.set_beam(image.get_beam())
         imageset.set_detector(image.get_detector())
+        # This is usually populated by Format.get_imageset() but since we created imageset manually,
+        # we have to fill this explicitly.
+        imageset.external_lookup.mask.data = pixel_mask
         experiments = ExperimentListFactory.from_imageset_and_crystal(imageset, None)
 
         if False: # skip spot-finding
