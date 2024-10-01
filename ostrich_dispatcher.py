@@ -139,6 +139,12 @@ class LogWatcher(threading.Thread):
             if tmp != None:
                 tmp['runid'] = self.runid
                 tmp['Comment'] = self.comment
+                # For backward-compatibility with old Cheetah pipeline.
+                # We support only finished runs.
+                if 'LLFpassed' in tmp:
+                    tmp['Total'] = tmp['LLFpassed']
+                    tmp['Processed'] = tmp['Total']
+                    del tmp['LLFpassed']
                 try:
                     f = open(self.index_cnt)
                     tmp['indexed'] = f.read()
@@ -207,10 +213,9 @@ class MainWindow(wx.Frame):
     COL_STATUS = 1
     COL_TOTAL = 2
     COL_PROCESSED = 3
-    COL_LLF_PASSED = 4
-    COL_HITS = 5
-    COL_INDEXED = 6
-    COL_COMMENT = 7
+    COL_HITS = 4
+    COL_INDEXED = 5
+    COL_COMMENT = 6
 
     MENU_KILLJOB = 0
     MENU_HDFSEE = 1
@@ -231,24 +236,22 @@ class MainWindow(wx.Frame):
             return
 
         title = "Ostrich Dispatcher on " + os.getcwd()
-        wx.Frame.__init__(self, parent, title=title, size=(900,800))
+        wx.Frame.__init__(self, parent, title=title, size=(900,750))
         self.table = wx.grid.Grid(self, size=(900, -1))
-        self.table.CreateGrid(0, 8, wx.grid.Grid.SelectRows) # row, column
+        self.table.CreateGrid(0, 7, wx.grid.Grid.SelectRows) # row, column
         self.table.EnableEditing(False)
         self.table.SetRowLabelSize(0)
         # FIXME: better col width
         self.table.SetColLabelValue(MainWindow.COL_RUNID, "Run ID         ")
-        self.table.SetColLabelValue(MainWindow.COL_STATUS, "Status       ")
+        self.table.SetColLabelValue(MainWindow.COL_STATUS, "Status          ")
         self.table.SetColLabelValue(MainWindow.COL_TOTAL, "Total    ")
         self.table.SetColLabelValue(MainWindow.COL_PROCESSED, "Processed     ")
-        self.table.SetColLabelValue(MainWindow.COL_LLF_PASSED, "Accepted      ")
         self.table.SetColLabelValue(MainWindow.COL_HITS, "Hits          ")
         self.table.SetColLabelValue(MainWindow.COL_INDEXED, "Indexed       ")
         self.table.SetColLabelValue(MainWindow.COL_COMMENT, "Comment  ")
         attr = wx.grid.GridCellAttr()
         attr.SetRenderer(ProgressCellRenderer())
         self.table.SetColAttr(MainWindow.COL_PROCESSED, attr)
-        self.table.SetColAttr(MainWindow.COL_LLF_PASSED, attr)
         self.table.SetColAttr(MainWindow.COL_HITS, attr)
         self.table.SetColAttr(MainWindow.COL_INDEXED, attr)
         for i in range(7):
@@ -397,7 +400,6 @@ class MainWindow(wx.Frame):
             try:
                 total[typ] += int(self.table.GetCellValue(row, self.COL_TOTAL))
                 processed[typ] += int(self.table.GetCellValue(row, self.COL_PROCESSED).rsplit(" ")[0])
-                accepted[typ] += int(self.table.GetCellValue(row, self.COL_LLF_PASSED).rsplit(" ")[0])
                 hits[typ] += int(self.table.GetCellValue(row, self.COL_HITS).rsplit(" ")[0])
                 indexed[typ] += int(self.table.GetCellValue(row, self.COL_INDEXED).rsplit(" ")[0])
             except:
@@ -407,10 +409,10 @@ class MainWindow(wx.Frame):
             if total[t] != 0:
                 if message != "":
                     message += "\n"
-                message += "Type: %s\nTotal: %d\nProcessed: %d\nAccepted: %d\nHits: %d" % (t, total[t], processed[t], accepted[t], hits[t])
-                if accepted[t] != 0:
-                    message += " (%.1f%% of accepted)" % (100.0 * hits[t] / accepted[t])
-                message += "\nIndexed: %d " % indexed[t]
+                message += "Type: %s\nTotal: %d\nProcessed: %d\nHits: %d" % (t, total[t], processed[t], hits[t])
+                if total[t] != 0:
+                    message += " (%.1f%% of total)" % (100.0 * hits[t] / total[t])
+                message += "\nIndexed: %d" % indexed[t]
                 if hits[t] != 0:
                     message += " (%.1f%% of hits)" % (100.0 * indexed[t] / hits[t])
                 message += "\n"                
@@ -420,12 +422,15 @@ class MainWindow(wx.Frame):
 
     def HDFsee(self, runname):
         # FIXME: warn when multiple rows are selected
-        runid = runname[:runname.find("-")]
+        geometry = runname[:runname.find("-")] + ".geom"
+        if not os.path.exists(runname + "/" + geometry): # backward compatibility with old Cheetah pipeline
+            geometry = runname + ".geom"
+
         def launchHDFsee():
             if os.path.exists("%s/%s.stream" % (runname, runname)):
-                command = "cd {runname}; hdfsee -g {runid}.geom {runname}.stream -c invmono -i 10 &".format(runid=runid, runname=runname)
+                command = "cd {runname}; hdfsee -g {geometry} {runname}.stream -c invmono -i 10 &".format(geometry=geometry, runname=runname)
             else:
-                command = "hdfsee -g {runname}/{runid}.geom {runname}/run{runname}.h5 -c invmono -i 10 &".format(runid=runid, runname=runname)
+                command = "cd {runname}; hdfsee -g {geometry} run{runname}.h5 -c invmono -i 10 &".format(geometry=geometry, runname=runname)
             os.system(command)
 
         threading.Thread(target=launchHDFsee).start()
@@ -531,6 +536,7 @@ class MainWindow(wx.Frame):
         if (self.waitFor == None):
             return
 
+        # TODO: Support CITIUS job auto submission
         out = subprocess.Popen(["ShowRunInfo", "-b", "%d" % self.opts.bl, "-r", "%d" % self.waitFor], stdout=subprocess.PIPE).stdout.read().decode()
         lines = out.split("\n")
         if lines[0].find("Ready to Read") != -1:
@@ -657,21 +663,20 @@ class MainWindow(wx.Frame):
         processed = int(event.msg['Processed'])
         self.table.SetCellValue(row, MainWindow.COL_TOTAL, 
                                 "%d" % total)
+        processed_ratio = 100.0
+        if total != 0:
+             processed_ratio = 100.0 * processed / total
         self.table.SetCellValue(row, MainWindow.COL_PROCESSED, 
-                                "%d (%.1f%%)" % (processed, 100.0 * processed / total))
+                                "%d (%.1f%%)" % (processed, processed_ratio))
         self.table.SetCellBackgroundColour(row, MainWindow.COL_PROCESSED, MainWindow.COLOUR_GOOD)
 
         if (status == "DarkAveraging" or status == "waiting"):
             return
-        LLFpassed = int(event.msg['LLFpassed'])
+
         hits = int(event.msg['Hits'])
-        acceptance_rate = 0
-        if processed != 0: acceptance_rate = 100.0 * LLFpassed / processed
         hit_rate = 0
-        if LLFpassed != 0: hit_rate = 100.0 * hits / LLFpassed
-        self.table.SetCellValue(row, MainWindow.COL_LLF_PASSED,
-                                "%d (%.1f%%)" % (LLFpassed, acceptance_rate))
-        self.table.SetCellBackgroundColour(row, MainWindow.COL_LLF_PASSED, MainWindow.COLOUR_GOOD)
+        if total != 0:
+            hit_rate = 100.0 * hits / total 
         self.table.SetCellValue(row, MainWindow.COL_HITS,
                                 "%d (%.1f%%)" % (hits, hit_rate))
         if hit_rate > 75:

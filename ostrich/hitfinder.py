@@ -245,7 +245,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
                         chunkidx += 1
             n_hit += 1
 
-        # TODO: deal with "Processed"; this must include LLF failed
+        # The LLFpassed field is kept for backward compatibility.
         if n_processed % 10 == 0:
              update_status(status, "Total=%d,Processed=%d,LLFpassed=%d,Hits=%ld,Status=Hitfinding" % (len(pulse_energies), n_processed, n_processed, n_hit))
         print("%4d / %4d processed, %4d hits, current tag = %d with %d spot(s)" % (n_processed, len(tags), n_hit, tag, n_spots))
