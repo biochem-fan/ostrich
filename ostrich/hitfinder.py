@@ -245,9 +245,8 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
                         chunkidx += 1
             n_hit += 1
 
-        # The LLFpassed field is kept for backward compatibility.
         if n_processed % 10 == 0:
-             update_status(status, "Total=%d,Processed=%d,LLFpassed=%d,Hits=%ld,Status=Hitfinding" % (len(pulse_energies), n_processed, n_processed, n_hit))
+             update_status(status, "Total=%d,Processed=%d,Hits=%ld,Status=Hitfinding" % (len(tags), n_processed, n_hit))
         print("%4d / %4d processed, %4d hits, current tag = %d with %d spot(s)" % (n_processed, len(tags), n_hit, tag, n_spots))
 
     if use_nexus:
@@ -262,4 +261,4 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     read_queue.close()
     result_queue.close()
     print("%d Hit / %d Processed." % (n_hit, n_processed))
-    update_status(status, "Total=%d,Processed=%d,LLFpassed=%d,Hits=%ld,Status=Finished" % (len(pulse_energies), n_processed, n_processed, n_hit))
+    update_status(status, "Total=%d,Processed=%d,Hits=%ld,Status=Finished" % (len(tags), n_processed, n_hit))

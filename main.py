@@ -5,16 +5,18 @@
 
 import datetime
 import h5py
-import sys
 from multiprocessing import set_start_method, freeze_support
 import numpy as np
+import os.path
 import re
+import sys
+import traceback
 
 # SACLA APIs
 import ctdapy_xfel
 import dbpy
 
-from ostrich import VERSION
+from ostrich import VERSION, update_status
 from ostrich.dark_average import average_images
 from ostrich.detector import CITIUSDetector, MPCCDDetector
 from ostrich.geometry import *
@@ -87,16 +89,19 @@ def run(params):
 
     if not params.runtype.startswith("dark") and not params.runtype == "light":
         if int(params.runtype) >= params.nblock:
-            raise ValueError("runtype must be 0, 1, 2, ..., (nblock - 1)")
+            update_status("Status=Error-BadRunType")
+            raise ValueError("runtype must be 0, 1, 2, ..., (nblock - 1).")
 
     if binning != 1 and not use_nexus:
-        raise ValueError("binning is available only for NXmx output")
+        update_status("Status=Error-InvalidBinning")
+        raise ValueError("binning is available only for NXmx output.")
 
     # Get Run info
     try:
         run_info = dbpy.read_runinfo(bl, runid)
     except:
-        raise RuntimeError("BadRunID")
+        update_status("Status=Error-BadRunID")
+        raise RuntimeError("Failed to get the run information. Probably the requested run does not exist.")
     high_tag = dbpy.read_hightagnumber(bl, runid)
     comment = dbpy.read_comment(bl, runid)
     tags = dbpy.read_taglist_byrun(bl, runid)
@@ -107,29 +112,50 @@ def run(params):
     print("Comment: %s\n" % comment)
 
     # Find detectors
-    try:
-        det_ids_all = dbpy.read_detidlist(bl, runid)
-        print("Detector IDs: " + " ".join(det_ids_all))
-        det_ids = MPCCDDetector.filter_mpccd_octal(det_ids_all)
-        print("MPCCD Octal IDs to use: " + " ".join(det_ids))
-        is_citius = False
-    except:
-        ctrl_buf = ctdapy_xfel.CtrlBuffer(bl, runid)
-        det_ids_all = sorted(ctrl_buf.read_prbidlist())
-        print("CITIUS detector available PRB IDs:", det_ids_all)
-        det_ids = CITIUSDetector.filter_prbs_by_roi(det_ids_all, citius_roi)
-        print("CITIUS detector PRBs within the ROI:", det_ids)
-        is_citius = True
+    citius_status = ctdapy_xfel.get_runstatus(bl ,runid)
+    if citius_status == ctdapy_xfel.CTDA_RUN_STATUS_CAN_READ:
+        try:
+            ctrl_buf = ctdapy_xfel.CtrlBuffer(bl, runid)
+            det_ids_all = sorted(ctrl_buf.read_prbidlist())
+            print("CITIUS detector available PRB IDs:", det_ids_all)
+            det_ids = CITIUSDetector.filter_prbs_by_roi(det_ids_all, citius_roi)
+            print("CITIUS detector PRBs within the ROI:", det_ids)
+            is_citius = True
+        except:
+            update_status("Status=Error-CITIUSFailedToGetDetectors")
+            raise RuntimeError("Found a CITIUS detector but failed to get PRB IDs.")
+    elif citius_status == ctdapy_xfel.CTDA_RUN_STATUS_WAIT_CALIB:
+        update_status("Status=Error-CITIUSNotYetReady")
+        raise RuntimeError("Found a CITIUS detector but calibration is still underway. Please try again later.")
+    else:
+        try:
+            det_ids_all = dbpy.read_detidlist(bl, runid)
+            print("Detector IDs: " + " ".join(det_ids_all))
+            det_ids = MPCCDDetector.filter_mpccd_octal(det_ids_all)
+            print("MPCCD Octal IDs to use: " + " ".join(det_ids))
+            is_citius = False
+        except:
+            update_status("Status=Error-NoSupportedDetectorFound")
+            raise RuntimeError("Neither MPCCD or CITIUS was found for this run.")
     print()
 
     # Find images for dark average
-    exposed = is_exposed(high_tag, tags, bl, runid)
+    try:
+        exposed = is_exposed(high_tag, tags, bl, runid)
+    except Exception as e:
+        update_status("Status=Error-NoShutterStatus")
+        raise e
     calib_images = [tag for tag, exposed in zip(tags, exposed) if not exposed]
     exposed_images = [tag for tag, exposed in zip(tags, exposed) if exposed]
     assert len(calib_images) + len(exposed_images) == len(tags)
 
-    if not is_citius and np.sum(calib_images) == 0:
-        RuntimeError("NoDarkImage")
+    if not is_citius and len(calib_images) == 0:
+        update_status("Status=Error-NoDarkImage")
+        raise RuntimeError("No dark image was available for MPCCD dark current subtraction.")
+
+    if len(exposed_images) == 0:
+        update_status("Status=Error-NoImage")
+        raise RuntimeError("No exposed image was available. Nothing to do.")
 
     # Setup buffer readers
     if is_citius:
@@ -345,4 +371,17 @@ if __name__ == "__main__":
     print("Option: nexus             = %s" % params.nexus)
     print()
 
-    run(params)
+    try:
+        run(params)
+    except:
+        # Do not overwrite an existing detailed error message by a general message.
+        already_reported = False
+        if params.status != "":
+            if os.path.exists(params.status):
+                with open(params.status) as f:
+                    if "Error" in f.read():
+                        already_reported = True
+        if not already_reported:
+            update_status(params.status, "Status=Error-PleaseCheckLog")
+
+        print(traceback.format_exc())

@@ -64,7 +64,7 @@ def average_images(detector, tags, photon_energies, adu_per_photon, status, npro
         for idx, tag in enumerate(tags):
             print("Processing tag %d (%2.1f%% done)" % (tag, 100.0 * (idx + 1) / len(tags)))
             if idx % 5 == 0:
-                update_status(status, "Total=%d,Processed=%d,Status=DarkAveraging\n" % (len(tags), idx + 1))
+                update_status(status, "Total=%d,Processed=%d,Status=DarkAveraging" % (len(tags), idx + 1))
             n_added += add_image(tag, photon_energies[idx])
     else:
         read_queue = Queue()
@@ -88,7 +88,7 @@ def average_images(detector, tags, photon_energies, adu_per_photon, status, npro
             if len(msg) == 1:
                 n_processed_images += 1
                 if n_processed_images % 5 == 0:
-                    update_status(status, "Total=%d,Processed=%d,Status=DarkAveraging\n" % (len(tags), n_processed_images))
+                    update_status(status, "Total=%d,Processed=%d,Status=DarkAveraging" % (len(tags), n_processed_images))
                 continue
             local_buffer, local_n_added = msg
             sum_buffer += local_buffer

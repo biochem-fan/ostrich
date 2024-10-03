@@ -141,7 +141,7 @@ class LogWatcher(threading.Thread):
                 tmp['Comment'] = self.comment
                 # For backward-compatibility with old Cheetah pipeline.
                 # We support only finished runs.
-                if 'LLFpassed' in tmp:
+                if 'LLFpassed' in tmp and 'Total' in tmp:
                     tmp['Total'] = tmp['LLFpassed']
                     tmp['Processed'] = tmp['Total']
                     del tmp['LLFpassed']
@@ -536,7 +536,8 @@ class MainWindow(wx.Frame):
         if (self.waitFor == None):
             return
 
-        # TODO: Support CITIUS job auto submission
+        # TODO: Wait for CITIUS image preprocessing
+        # TODO: Provide CITIUS specific options
         out = subprocess.Popen(["ShowRunInfo", "-b", "%d" % self.opts.bl, "-r", "%d" % self.waitFor], stdout=subprocess.PIPE).stdout.read().decode()
         lines = out.split("\n")
         if lines[0].find("Ready to Read") != -1:
