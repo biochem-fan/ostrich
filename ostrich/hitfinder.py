@@ -200,8 +200,6 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
 
     if use_nexus:
         data_group = h5out["/entry/data"]
-        # The scale factor is unofficial at the moment. See https://github.com/nexusformat/definitions/pull/1343.
-        data_group.create_dataset("data_scale_factor", data=1.0 / adu_per_photon)
         d = data_group.create_dataset("data", shape=(0, 0, 0), dtype=dtype, \
                                       maxshape=(None, ysize * npanels, xsize), chunks=(1, chunksize[0], chunksize[1]), \
                                       compression="gzip", shuffle=True)

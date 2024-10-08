@@ -197,7 +197,7 @@ def run(params):
 
     output_filename = "run%d-%s.h5" % (runid, params.runtype)
     if use_nexus:
-        write_nexus(output_filename, detector.geometry, bl, runid, comment, start_time, end_time, clen, binned_pixel_mask, beam_center, binning)
+        write_nexus(output_filename, detector.geometry, bl, runid, comment, start_time, end_time, clen, adu_per_photon, binned_pixel_mask, beam_center, binning)
     else:
         write_metadata(output_filename, detector.geometry, clen, comment, runid, adu_per_photon, binned_pixel_mask)
     print()

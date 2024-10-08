@@ -321,7 +321,7 @@ def write_metadata(filename, geometry, clen, comment, runid, adu_per_photon, pix
     f.create_dataset("/metadata/pixelmask", data=pixel_mask, compression="gzip", shuffle=True)
     f.close()
 
-def write_nexus(filename, geometry, bl, runid, comment, start_time, end_time, clen, pixel_mask, beam_center, binning=1):
+def write_nexus(filename, geometry, bl, runid, comment, start_time, end_time, clen, adu_per_photon, pixel_mask, beam_center, binning=1):
     assert geometry.width % binning == 0
     assert geometry.height % binning == 0
 
@@ -433,5 +433,6 @@ def write_nexus(filename, geometry, bl, runid, comment, start_time, end_time, cl
     data_group = entry.create_group("data")
     data_group.attrs['NX_class'] = "NXdata"
     data_group.attrs['signal'] = "data"
+    data_group.create_dataset("data_scale_factor", data=1.0 / adu_per_photon)
 
     f.close()
