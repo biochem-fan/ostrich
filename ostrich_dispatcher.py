@@ -539,11 +539,9 @@ class MainWindow(wx.Frame):
         if (self.waitFor == None):
             return
 
-        # TODO: Wait for CITIUS image preprocessing
         # TODO: Provide CITIUS specific options
-        out = subprocess.Popen(["ShowRunInfo", "-b", "%d" % self.opts.bl, "-r", "%d" % self.waitFor], stdout=subprocess.PIPE).stdout.read().decode()
-        lines = out.split("\n")
-        if lines[0].find("Ready to Read") != -1:
+        out = subprocess.Popen(["CITIUSShowRunStatus", "-b", "%d" % self.opts.bl, "-r", "%d" % self.waitFor], stdout=subprocess.PIPE).stdout.read().decode()
+        if out.find("CTDA_RUN_STATUS_NOT_CITIUS") != -1 or out.find("CTDA_RUN_STATUS_CAN_READ") != -1:
                 print("\rRun %d became ready." % self.waitFor)
                 self.prepareSubmitJob("%d" % self.waitFor)
                 self.waitFor = self.waitFor + 1
