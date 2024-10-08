@@ -5,6 +5,7 @@
 
 import datetime
 import h5py
+import libtbx
 from multiprocessing import set_start_method, freeze_support
 import numpy as np
 import os.path
@@ -82,7 +83,6 @@ def run(params):
     clen = params.clen
     nproc = params.nproc
     status = params.status
-    adu_per_photon = params.adu_per_photon
     citius_roi = params.citius_roi
     binning = params.binning
     use_nexus = params.nexus
@@ -138,6 +138,13 @@ def run(params):
             update_status("Status=Error-NoSupportedDetectorFound")
             raise RuntimeError("Neither MPCCD or CITIUS was found for this run.")
     print()
+
+    if params.adu_per_photon == libtbx.Auto:
+        if is_citius:
+            params.adu_per_photon = 4
+        else:
+            params.adu_per_photon = 10
+    adu_per_photon = params.adu_per_photon
 
     # Find images for dark average
     try:
@@ -297,8 +304,8 @@ compression_level = 6
  .help = GZIP compression level for output frames
  .type = int(value_min = 0, value_max = 9)
 
-adu_per_photon = 10
- .help = Output value per photon
+adu_per_photon = Auto
+ .help = Output value per photon. Auto means 10 for MPCCD, 4 for CITIUS.
  .type = float(value_min=0.1, value_max = 100)
 
 citius_roi = *all 24 40 48
@@ -364,7 +371,10 @@ if __name__ == "__main__":
     print("Option: nproc             = %d" % params.nproc)
     print("Option: status            = %s" % params.status)
     print("Option: compression_level = %d" % params.compression_level)
-    print("Option: adu_per_photon    = %.1f / photon" % params.adu_per_photon)
+    if params.adu_per_photon == libtbx.Auto:
+        print("Option: adu_per_photon    = Auto (10 for MPCCD, 4 for CITIUS)")
+    else:
+        print("Option: adu_per_photon    = %.1f / photon" % params.adu_per_photon)
     print("Option: citius_roi        = %s" % params.citius_roi)
     print("Option: hitfinding_roi    = %s" % params.hitfinding_roi)
     print("Option: binning           = %d" % params.binning)
