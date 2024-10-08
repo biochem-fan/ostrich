@@ -28,6 +28,9 @@ import wx.lib.newevent
 
 PARALLEL_SIZE = 3
 NPROC = 16
+SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-17-0/dials_env.sh"
+OSTRICH_PATH = "~sacla_sfx_app/packages/ostrich"
+CRYSTFEL_PATH = "~sacla_sfx_app/packages/crystfel-0.10.2/build"
 
 re_filename = re.compile("^[0-9]+(-dark[0-9]?|-light|-\d)?$")
 re_status = re.compile("^Status:")
@@ -52,15 +55,15 @@ cd $PBS_O_WORKDIR/{runname}
 
 echo $PBS_JOBID > job.id
 hostname > job.host
-source @@SETUP_SCRIPT@@
+{setup_script}
 ShowRunInfo -b {beamline} -r {runid} > run.info
 
-@@OSTRICH_PATH@@/main.py runid={runid} bl={beamline} status=status.txt \
+dials.python {ostrich_path}/main.py runid={runid} bl={beamline} status=status.txt \
    runtype={runtype} nproc={nproc} nblock={nblock} \
    {arguments} 2>&1 >> ostrich.log
 
 # th 100 gr 5000000 for > 10 keV
-@@INDEXAMAJIG_PATH@@/indexamajig -g {runid}.geom -o {runname}.stream -j {nproc} -i - \
+{crystfel_path}/indexamajig -g {runid}.geom -o {runname}.stream -j {nproc} -i - \
    --indexing=dirax --peaks=zaef --threshold=400 --min-gradient=10000 --min-snr=5 --int-radius=3,4,7 \
    {crystfel_args} <<EOF
 run{runname}.h5
@@ -603,7 +606,9 @@ class MainWindow(wx.Frame):
             f.write(job_script.format(runid=runid, runname=run_dir, clen=self.opts.clen,
                                       nproc=NPROC, nblock=PARALLEL_SIZE, runtype=subjob,
                                       queuename=self.opts.queue, arguments=arguments,
-                                      crystfel_args=crystfel_args, beamline=bl))
+                                      crystfel_args=crystfel_args, beamline=bl,
+                                      setup_script=SETUP_SCRIPT, ostrich_path=OSTRICH_PATH,
+                                      crystfel_path=CRYSTFEL_PATH))
             f.close()
             if self.opts.quick != 1 or subjob == "0" or subjob == "light":
                 os.system("qsub {runid}/run.sh > {runid}/job.id".format(runid=run_dir))
@@ -751,7 +756,7 @@ class ProgressCellRenderer(wx.grid.GridCellRenderer):
         return ProgressCellRenderer() 
 
 print()
-print("Ostrich dispatcher GUI version 20240930")
+print("Ostrich dispatcher GUI version 20241008")
 print("   by Takanori Nakane (tnakane.protein@osaka-u.ac.jp)")
 print()
 print("Please cite the following paper when you use this software.")
@@ -836,4 +841,3 @@ else:
     app = wx.App(False)
     frame = MainWindow(None, opts)
     app.MainLoop()
-
