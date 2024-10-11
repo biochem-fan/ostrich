@@ -46,9 +46,6 @@ job_script = '''#!/bin/bash
 
 cd $PBS_O_WORKDIR/{runname}
 
-# This is the master job for runid, runid-light, runid-0.
-# Subjobs must be submitted separatedly.
-
 #if [ -e job.id ]; then
 #   exit
 #fi
@@ -58,19 +55,27 @@ hostname > job.host
 {setup_script}
 ShowRunInfo -b {beamline} -r {runid} > run.info
 
+TIME_START=`date +%s`
 dials.python {ostrich_path}/main.py runid={runid} bl={beamline} status=status.txt \
    runtype={runtype} nproc={nproc} nblock={nblock} \
    {arguments} 2>&1 >> ostrich.log
+TIME_OSTRICH=`date +%s`
 
-# th 100 gr 5000000 for > 10 keV
+# --xgandalf-sampling-pitch=2 --xgandalf-grad-desc-iterations=3 is equivalent to --xgandalf-fast-execution
+# but setting in this way allows one to "disable" it in crystfel.args by overriding by the default
+# --xgandalf-sampling-pitch=6 --xgandalf-grad-desc-iterations=4.
 {crystfel_path}/indexamajig -g {runid}.geom -o {runname}.stream -j {nproc} -i - \
-   --indexing=dirax --peaks=zaef --threshold=400 --min-gradient=10000 --min-snr=5 --int-radius=3,4,7 \
+   --indexing=xgandalf --xgandalf-sampling-pitch=2 --xgandalf-grad-desc-iterations=3 \
+   --peaks=peakfinder8 --threshold=100 --min-snr=5 --min-pix-count=2 --local-bg-radius=3 --int-radius=3,4,7 \
    {crystfel_args} <<EOF
 run{runname}.h5
 EOF
 rm -fr indexamajig.*
 grep Cell {runname}.stream | wc -l > indexed.cnt
+TIME_CRYSTFEL=`date +%s`
 
+echo "TIME_FOR_OSTRICH: "`echo $TIME_OSTRICH - $TIME_START | bc` >> ostrich.log
+echo "TIME_FOR_CRYSTFEL: "`echo $TIME_CRYSTFEL - $TIME_OSTRICH | bc` >> ostrich.log
 rm job.id job.host
 '''
 
@@ -754,7 +759,7 @@ class ProgressCellRenderer(wx.grid.GridCellRenderer):
         return ProgressCellRenderer() 
 
 print()
-print("Ostrich dispatcher GUI version 20241008")
+print("Ostrich dispatcher GUI version 20241011")
 print("   by Takanori Nakane (tnakane.protein@osaka-u.ac.jp)")
 print()
 print("Please cite the following paper when you use this software.")
