@@ -441,7 +441,7 @@ class MainWindow(wx.Frame):
     def CellExplorer(self, runname):
         # FIXME: warn when multiple rows are selected
         def launchCellExplorer():
-            command = "cd {runname}; cell_explorer {runname}.stream &".format(runid=runname)
+            command = "cd {runname}; cell_explorer {runname}.stream &".format(runname=runname)
             os.system(command)
             
         if os.path.exists("%s/%s.stream" % (runname, runname)):
