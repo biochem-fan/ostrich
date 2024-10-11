@@ -25,7 +25,6 @@ from ostrich.hitfinder import find_hits
 from ostrich.metadata import is_exposed, get_photon_energies, syncdata2float
 
 def classify_frames(params, high_tag, tags):
-    # TODO: test time-resolved mode
     ret = np.zeros(len(tags))
 
     if params.runtype.startswith("dark") or params.runtype == "light":
@@ -39,16 +38,16 @@ def classify_frames(params, high_tag, tags):
         nframe_after_light = 0
         for i, tag in enumerate(tags):
             if (params.pd1_threshold != 0 and
-                (not (params.pd1_threshold > 0 and  params.pd1_threshold <= pd1_value[i])) and
-                (not (params.pd1_threshold < 0 and -params.pd1_threshold >  pd1_value[i]))) \
+                (not (params.pd1_threshold > 0 and  params.pd1_threshold <= pd1_values[i])) and
+                (not (params.pd1_threshold < 0 and -params.pd1_threshold >  pd1_values[i]))) \
                or \
                (params.pd2_threshold != 0 and
-                (not (params.pd2_threshold > 0 and  params.pd2_threshold <= pd2_value[i])) and
-                (not (params.pd2_threshold < 0 and -params.pd2_threshold >  pd2_value[i]))) \
+                (not (params.pd2_threshold > 0 and  params.pd2_threshold <= pd2_values[i])) and
+                (not (params.pd2_threshold < 0 and -params.pd2_threshold >  pd2_values[i]))) \
                or \
                (params.pd3_threshold != 0 and
-                (not (params.pd3_threshold > 0 and  params.pd3_threshold <= pd3_value[i])) and
-                (not (params.pd3_threshold < 0 and -params.pd3_threshold >  pd3_value[i]))):
+                (not (params.pd3_threshold > 0 and  params.pd3_threshold <= pd3_values[i])) and
+                (not (params.pd3_threshold < 0 and -params.pd3_threshold >  pd3_values[i]))):
                 nframe_after_light += 1
             else:
                 nframe_after_light = 0
@@ -70,12 +69,12 @@ def runtype_to_num(runtype):
     try:
         if runtype == "light":
             return 0
-        elif runtype.startswith("dark-"):
-            return int(runtype[5:])
+        elif runtype.startswith("dark"):
+            return int(runtype[4:])
         else:
             return int(runtype)
     except e:
-        raise ValueError("runtype must be 0, 1, 2, ... or light or dark-1, dark-2, ...")
+        raise ValueError("runtype must be 0, 1, 2, ... or light or dark1, dark2, ...")
 
 def run(params):
     runid = params.runid
@@ -256,15 +255,15 @@ clen = 50.0
  .help = Detector distance in millimeter
  .type = float(value_min = 0)
 
-pd1_thresh = 0
+pd1_threshold = 0
  .help = Threshold for photodiode 1 (pd1_name) for light. Set 0 to ignore this photodide.
  .type = float
 
-pd2_thresh = 0
+pd2_threshold = 0
  .help = Threshold for photodiode 2 (pd1_name2) for light. Set 0 to ignore this photodide.
  .type = float
 
-pd3_thresh = 0
+pd3_threshold = 0
  .help = Threshold for photodiode 3 (pd1_name3) for light. Set 0 to ignore this photodide.
  .type = float
 
@@ -285,7 +284,7 @@ hit_threshold = 20
  .type = int(value_min = 0)
 
 runtype = 0
- .help = Parallelization mode (0, 1, ..., nblocks-1 for non-TR SFX and light, dark-1, dark-2, ... for TR-SFX)
+ .help = Parallelization mode (0, 1, ..., nblocks-1 for non-TR SFX and light, dark1, dark2, ... for TR-SFX)
  .type = str
 
 nblock = 3
@@ -361,11 +360,11 @@ if __name__ == "__main__":
     print("Option: runid             = %d" % params.runid)
     print("Option: clen              = %.1f mm" % params.clen)
     print("Option: pd1_name          = %s" % params.pd1_name)
-    print("Option: pd1_threshold     = %.2f" % params.pd1_thresh)
+    print("Option: pd1_threshold     = %.2f" % params.pd1_threshold)
     print("Option: pd2_name          = %s" % params.pd2_name)
-    print("Option: pd2_threshold     = %.2f" % params.pd2_thresh)
+    print("Option: pd2_threshold     = %.2f" % params.pd2_threshold)
     print("Option: pd3_name          = %s" % params.pd3_name)
-    print("Option: pd3_threshold     = %.2f" % params.pd3_thresh)
+    print("Option: pd3_threshold     = %.2f" % params.pd3_threshold)
     print("Option: hit_threshold     = %d" % params.hit_threshold)
     print("Option: runtype           = %s" % params.runtype)
     print("Option: nproc             = %d" % params.nproc)

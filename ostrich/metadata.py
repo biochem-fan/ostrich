@@ -16,6 +16,9 @@ def str2float(str):
         return None
 
 def syncdata2float(sensor, high_tag, tags):
+    if tags is not tuple:
+        tags = tuple(tags)
+
     return [str2float(s) for s in dbpy.read_syncdatalist(sensor, high_tag, tags)]
 
 def is_exposed(high_tag, tags, bl, runid):
