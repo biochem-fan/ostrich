@@ -237,7 +237,9 @@ def write_cheetah_geom(filename, geometry, binning=1):
 # Returns (border, outer_border)
 # outer_border is along the fast edge at the largest slow values
 def get_border(det_name):
-    if re.match("MPCCD-8B0-2-007", det_name): # New Phase 3 detector
+    if re.match("MPCCD-8B0-2-008", det_name): # New Phase 3 detector
+        return (5, 30) # based on 24Feb-Shimada @ 10keV
+    elif re.match("MPCCD-8B0-2-007", det_name): # New Phase 3 detector
         return (5, 33) # based on 22Nov-Iwata @ 10keV
     elif re.match("MPCCD-8B0-2-006", det_name): # New Phase 3 detector
         return (5, 30) # based on 20Feb-Ueno @ 10keV
@@ -253,7 +255,7 @@ def get_border(det_name):
     elif re.match("CITIUS 20.2M", det_name): # based on 2024-Jul-12, 180 mm
         return (1, 14)
     else:
-        return (0, 0)
+        return (5, 30) # default assumes New Phase 3 detector
 
 # This returns a non-binned mask, because it is used for in-memory hitfinding.
 def make_pixelmask(geometry, runid, binning=1):
