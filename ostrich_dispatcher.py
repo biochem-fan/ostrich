@@ -575,7 +575,7 @@ class MainWindow(wx.Frame):
 
     def startRun(self, runid, bl, pd1_thresh=0, pd2_thresh=0, pd3_thresh=0):
         run_dir = runid
-        arguments = ""
+        arguments = self.opts.ostrich_args + " "
         subjobs = []
         
         if (pd1_thresh != 0 or pd2_thresh != 0 or pd3_thresh != 0):
@@ -785,6 +785,7 @@ parser.add_option("--submit_dark2", dest="submit_dark2", type=int, default=False
 parser.add_option("--submit_dark_to", dest="submit_dark_to", type=int, default=False, help="accepts up to M (<=9) darks (Ln-Dm) and divide into light, dark1, ..., darkM")
 parser.add_option("--submit_dark_any", dest="submit_dark_any", type=int, default=False, help="accepts any lights and darks (Ln-Dm) and divide into light and dark")
 parser.add_option("--crystfel_args", dest="crystfel_args", type=str, default="", help="optional arguments to CrystFEL")
+parser.add_option("--ostrich_args", dest="ostrich_args", type=str, default="", help="optional arguments to OSTRICH (e.g. DIALS spot finding parameters)")
 parser.add_option("--submit", dest="submit", type=int, default=-1, help="submit run (noGUI)")
 parser.add_option("--pd1_thresh", dest="pd1_thresh", type=float, default=0, help="PD1 threshold")
 parser.add_option("--pd2_thresh", dest="pd2_thresh", type=float, default=0, help="PD2 threshold")
@@ -835,6 +836,7 @@ print("Option: pd3_thresh       = %f" % opts.pd3_thresh)
 print("Option: submit_dark_to   = %s" % opts.submit_dark_to)
 print("Option: submit_dark_any  = %s" % opts.submit_dark_any)
 print("Option: crystfel_args    = %s" % opts.crystfel_args)
+print("Option: ostrich_args    = %s" % opts.ostrich_args)
 
 if opts.submit > 0: # headless
     mw = MainWindow(None, opts, True)
