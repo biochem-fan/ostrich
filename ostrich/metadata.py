@@ -92,7 +92,7 @@ def get_photon_energies(bl, runid, high_tag, tags):
 
     config_photon_energy = 1000.0 * dbpy.read_config_photonenergy(bl, runid)
     config_photon_energy_sensible = True
-    if config_photon_energy < 5000 or config_photon_energy > 14000:
+    if config_photon_energy < 5000 or config_photon_energy > 15000:
         print("WARNING: dbpy.read_config_photonenergy returned %f eV, which is absurd!" % config_photon_energy)
         print("         Report this to SACLA DAQ team.")
         print("         This is not problematic unless the inline spectrometer is also broken.")
