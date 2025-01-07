@@ -50,7 +50,8 @@ class Detector:
     def allocate_readers(self):
         raise NotImplementedError
 
-    def validate_and_set_geometry(self, det_infos):
+    # this is a static method
+    def validate_and_set_geometry(det_infos):
         raise NotImplementedError
 
     def read_detinfos(self):
@@ -109,19 +110,19 @@ class CITIUSDetector(Detector):
         if self.geometry is None:
             self.read_detinfos()
 
-    def validate_and_set_geometry(self, det_infos):
-        self.geometry = DetectorGeometry()
+    def validate_and_set_geometry(det_infos):
+        geometry = DetectorGeometry()
 
-        self.geometry.name = "CITIUS 20.2M"
-        self.geometry.width = ctdapy_xfel.CITIUS_IMAGE_WIDTH
-        self.geometry.height = ctdapy_xfel.CITIUS_IMAGE_HEIGHT
-        self.geometry.pixel_size = det_infos[0]['pixel_size_x']
-        self.geometry.thickness = 650
+        geometry.name = "CITIUS 20.2M"
+        geometry.width = ctdapy_xfel.CITIUS_IMAGE_WIDTH
+        geometry.height = ctdapy_xfel.CITIUS_IMAGE_HEIGHT
+        geometry.pixel_size = det_infos[0]['pixel_size_x']
+        geometry.thickness = 650
 
         for det_info in det_infos:
             # All panels must be the same shape
-            assert self.geometry.pixel_size == det_info['pixel_size_x']
-            assert self.geometry.pixel_size == det_info['pixel_size_y']
+            assert geometry.pixel_size == det_info['pixel_size_x']
+            assert geometry.pixel_size == det_info['pixel_size_y']
 
             panel = DetectorPanel()
             panel.name = "prb%02d" % det_info['id']
@@ -132,28 +133,31 @@ class CITIUSDetector(Detector):
             panel.pos_z = det_info['position_z']
             panel.rotation = det_info['position_theta'] * pi / 180.0
             panel.gain = 1.0 # already normalized to the number of electrons by API
-            self.geometry.panels.append(panel)
+            geometry.panels.append(panel)
 
         # Analyze 2 x 4 SSS (Sensor Sub System) blocks, each containing 3x3 panels
-        self.geometry.groups = []
+        geometry.groups = []
+        det_ids = [p['id'] for p in det_infos]
         for y in [0, 3, 6, 9]:
             for x in [0, 3]:
                 prb_in_sss = []
                 for dy in range(3):
                     for dx in range(3):
                         prb = x + dx + (y + dy) * 6
-                        if prb in self.det_ids:
+                        if prb in det_ids:
                             prb_in_sss.append("prb%02d" % prb)
 
                 if len(prb_in_sss) > 0:
-                    self.geometry.groups.append(("sss%d%d" % (x, y), prb_in_sss))
+                    geometry.groups.append(("sss%d%d" % (x, y), prb_in_sss))
+
+        return geometry
 
     def read_detinfos(self):
         det_infos = [self.buffers.read_reconstinfo(prb_id, self.first_tag) for prb_id in self.det_ids]
         for det_info, prb_id in zip(det_infos, self.det_ids):
             det_info['id'] = prb_id
 
-        self.validate_and_set_geometry(det_infos)
+        self.geometry = CITIUSDetector.validate_and_set_geometry(det_infos)
 
     def deallocate_readers(self):
         self.readers = None
@@ -186,38 +190,40 @@ class MPCCDDetector(Detector):
         if self.geometry is None:
             self.read_detinfos()
 
-    def validate_and_set_geometry(self, det_infos):
-        self.geometry = DetectorGeometry()
+    def validate_and_set_geometry(det_infos):
+        geometry = DetectorGeometry()
 
-        self.geometry.name = self.det_ids[0][:-2] # Remove panel ID "-N"
-        self.geometry.width = det_infos[0]["xsize"]
-        self.geometry.height = det_infos[0]["ysize"]
-        self.geometry.pixel_size = det_infos[0]["mp_pixelsizex"]
+        geometry.name = det_infos[0]['id'][:-2] # Remove panel ID "-N"
+        geometry.width = det_infos[0]["xsize"]
+        geometry.height = det_infos[0]["ysize"]
+        geometry.pixel_size = det_infos[0]["mp_pixelsizex"]
 
-        self.geometry.thickness = 300 # um for Phase III (was 50 um for Phase I)
-        self.geometry.groups = []
+        geometry.thickness = 300 # um for Phase III (was 50 um for Phase I)
+        geometry.groups = []
 
         for i, det_info in enumerate(det_infos):
             # All panels must be the same shape
-            assert self.geometry.width == det_info["xsize"]
-            assert self.geometry.height == det_info["ysize"]
-            assert self.geometry.pixel_size == det_info["mp_pixelsizex"]
-            assert self.geometry.pixel_size == det_info["mp_pixelsizey"]
+            assert geometry.width == det_info["xsize"]
+            assert geometry.height == det_info["ysize"]
+            assert geometry.pixel_size == det_info["mp_pixelsizex"]
+            assert geometry.pixel_size == det_info["mp_pixelsizey"]
 
             # The direct beam aperture must be closed
             assert det_info["mp_manipulator_shift"] == 0
 
             panel = DetectorPanel()
             panel.name = "q%d" % (i + 1)
-            panel.long_name = self.det_ids[i]
+            panel.long_name = det_info['id']
             panel.index = i
             panel.pos_x = det_info['mp_posx']
             panel.pos_y = det_info['mp_posy']
             panel.pos_z = det_info['mp_posz']
             panel.rotation = det_info['mp_rotationangle'] * pi / 180.0
             panel.gain = det_info['mp_absgain']
-            self.geometry.panels.append(panel)
-            self.geometry.groups.append(("group%d" % (i + 1), [panel.name]))
+            geometry.panels.append(panel)
+            geometry.groups.append(("group%d" % (i + 1), [panel.name]))
+
+        return geometry
 
     def read_detinfos(self):
         for reader, buf in zip(self.readers, self.buffers):
@@ -230,7 +236,7 @@ class MPCCDDetector(Detector):
         det_infos = [buf.read_det_info(0) for buf in self.buffers]
         for i, det_info in enumerate(det_infos):
             det_info['id'] = self.det_ids[i]
-        self.validate_and_set_geometry(det_infos)
+        self.geometry = MPCCDDetector.validate_and_set_geometry(det_infos)
 
     def deallocate_readers(self):
         self.readers = None
