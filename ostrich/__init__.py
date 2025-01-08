@@ -1,4 +1,4 @@
-VERSION = 241023
+VERSION = 250108
 
 def update_status(filename, message):
     if filename == "" or filename is None:

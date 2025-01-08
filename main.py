@@ -115,7 +115,7 @@ def run(params):
     if citius_status == ctdapy_xfel.CTDA_RUN_STATUS_CAN_READ:
         try:
             ctrl_buf = ctdapy_xfel.CtrlBuffer(bl, runid)
-            det_ids_all = sorted(ctrl_buf.read_prbidlist())
+            det_ids_all = sorted(ctrl_buf.read_sensoridlist())
             print("CITIUS detector available PRB IDs:", det_ids_all)
             det_ids = CITIUSDetector.filter_prbs_by_roi(det_ids_all, citius_roi)
             print("CITIUS detector PRBs within the ROI:", det_ids)
