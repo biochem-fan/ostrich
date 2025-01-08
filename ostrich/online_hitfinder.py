@@ -19,15 +19,12 @@ from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image
 FRAME_NS = int(1E9 / 30.0) # 30 FPS
 
 def image_reading_worker(worker_id, start_frame, read_queue, hitfinding_queue, detector, shared_buffer_shape, dtype, params):
-    from dials.array_family import flex
-    from ostrich.inmemory_dxtbx import FormatSACLAInMemory
+    nproc_reader = params.nproc_reader
 
     shm = shared_memory.SharedMemory(OSTRICH_ONLINE_SHM_NAME)
     framebuffer = np.ndarray(shared_buffer_shape, dtype, buffer=shm.buf)
 
     detector.allocate_ctrl_buffer()
-    nproc_reader = params.nproc_reader
-
     xsize = detector.geometry.width
     ysize = detector.geometry.height
     gains = [panel.gain for panel in detector.geometry.panels]
@@ -37,7 +34,7 @@ def image_reading_worker(worker_id, start_frame, read_queue, hitfinding_queue, d
     while True:
         task = read_queue.get()
         if task is None:
-            result_queue.put(None)
+            hitfinding_queue.put(None)
             break
         slot = task
 
@@ -56,16 +53,35 @@ def image_reading_worker(worker_id, start_frame, read_queue, hitfinding_queue, d
                 print("Reader %d is too slow! fast forwarding frame idx to %f" % (worker_id, frame_idx))
             else:
                 break
+        hitfinding_queue.put((slot, cur_frame))
 
-def hitfinding_worker(woreker_id, hitfind_queue, result_queue, detector, dtype, pixel_mask, params):
+def hitfinding_worker(worker_id, hitfind_queue, result_queue, detector, shared_buffer_shape, dtype, pixel_mask,
+                     photon_energy, params):
+    from dials.array_family import flex
+    from ostrich.inmemory_dxtbx import FormatSACLAInMemory
+
+    clen = params.clen
+    adu_per_photon = 3.65 # * photon_energy
+
+    shm = shared_memory.SharedMemory(OSTRICH_ONLINE_SHM_NAME)
+    framebuffer = np.ndarray(shared_buffer_shape, dtype, buffer=shm.buf)
+
     # Convert the pixel_mask to DIALS's flex array
     if pixel_mask is not None:
         pixel_mask = ImageBool(tuple([flex.bool(m) for m in pixel_mask]))
 
     while True:
-        # Images are NOT binned yet!
-        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, adu_per_photon, distance=params.clen)
-        imageset = ImageSet(ImageSetData(MemReader([image,]), None))
+        task = hitfind_queue.get()
+        if task is None:
+            result_queue.put(None)
+            break
+        slot, cur_frame = task
+
+        #import time; time.sleep(0.1)
+        print("Hitfinder %d received frame %d at slot %d" % (worker_id, cur_frame, slot))
+
+        image = FormatSACLAInMemory(framebuffer[slot, :, :, :], detector.geometry, photon_energy, adu_per_photon, distance=clen)
+        imageset = ImageSet(ImageSetData(MemReader([image, ]), None))
         imageset.set_beam(image.get_beam())
         imageset.set_detector(image.get_detector())
         # This is usually populated by Format.get_imageset() but since we created imageset manually,
@@ -79,12 +95,12 @@ def hitfinding_worker(woreker_id, hitfind_queue, result_queue, detector, dtype, 
 
         observed = flex.reflection_table.from_observations(experiments, params, is_stills=True)
         xyzobs = observed['xyzobs.px.value']
-        result_queue.put([tag, len(xyzobs)])
+        result_queue.put((slot, cur_frame, len(xyzobs)))
 
 def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
     nproc_reader = params.nproc_reader
+    nproc_hitfinder = params.nproc_hitfinder
     framebuffer_size = params.framebuffer_size
-    adu_per_photon = 10 # TODO
     status = params.status
 
     xsize = detector.geometry.width
@@ -97,6 +113,7 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
     hitfind_queue = Queue()
     result_queue = Queue()
     image_read_workers = []
+    hitfinding_workers = []
 
     # Fill all empty slots
     for i in range(framebuffer_size):
@@ -107,14 +124,22 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
     cur_frame = info['data_time']
     print("Base time %d" % cur_frame)
 
-    # Create workers
+    # Create hitfinding workers
     detector.deallocate_readers()
+    for i in range(nproc_hitfinder):
+        p = Process(target=hitfinding_worker, args=(i, hitfind_queue, result_queue,  \
+                    detector, shared_buffer.shape, dtype, pixel_mask, photon_energy, params))
+        p.start()
+        print("Hitfinding worker process %d started." % (i,))
+        hitfinding_workers.append(p)
+
+    # Create reader workers
     for i in range(nproc_reader):
         start_frame = cur_frame + FRAME_NS * i
         p = Process(target=image_reading_worker, args=(i, start_frame, read_queue, hitfind_queue, \
                     detector, shared_buffer.shape, dtype, params))
         p.start()
-        print("Image reading worker process %d started with base time %d" % (i, start_frame))
+        print("Image reading worker process %d started with base time %d." % (i, start_frame))
         image_read_workers.append(p)
 
     n_finished = 0
@@ -126,10 +151,11 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
             n_finished += 1
             continue
 
-        tag, n_spots = task
+        slot, cur_frame, n_spots = task
         n_processed += 1
 
-        print("%4d processed, current tag = %d with %d spot(s)" % (n_processed, tag, n_spots))
+        print("%4d processed, current tag = %d with %d spot(s)" % (n_processed, cur_frame, n_spots))
+        read_queue.put(slot)
 
     [t.join() for t in workers]
     read_queue.close()
