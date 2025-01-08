@@ -7,7 +7,8 @@ from ostrich.detector import CITIUSDetector
 import re
 
 class CITIUSOnlineDetector():
-    def __init__(self, det_ids, image_buffer, ctrl_buffer=None, conn_id=0):
+    def __init__(self, det_ids, det_longname, image_buffer, ctrl_buffer=None, conn_id=0):
+        self.det_longname = det_longname
         self.ctrl_buffer = ctrl_buffer
         self.image_buffer = image_buffer
         self.det_ids = det_ids
@@ -33,7 +34,7 @@ class CITIUSOnlineDetector():
         for det_info, prb_id in zip(det_infos, self.det_ids):
             det_info['id'] = prb_id
 
-        self.geometry = CITIUSDetector.validate_and_set_geometry(det_infos)
+        self.geometry = CITIUSDetector.validate_and_set_geometry(det_infos, self.det_longname)
         # The above function uses constants in the offline API, so we have to apply binning.
         _, _, self.geometry.width, self.geometry.height = self.ctrl_buffer.read_binninginfo()
 

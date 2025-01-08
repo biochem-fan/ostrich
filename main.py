@@ -115,14 +115,16 @@ def run(params):
     if citius_status == ctdapy_xfel.CTDA_RUN_STATUS_CAN_READ:
         try:
             ctrl_buf = ctdapy_xfel.CtrlBuffer(bl, runid)
+            longnames = ctrl_buf.read_detidlist()
+            print("CITIUS detector available sensor full names:", longnames)
             det_ids_all = sorted(ctrl_buf.read_sensoridlist())
-            print("CITIUS detector available PRB IDs:", det_ids_all)
+            print("CITIUS detector available sensor IDs:", det_ids_all)
             det_ids = CITIUSDetector.filter_prbs_by_roi(det_ids_all, citius_roi)
-            print("CITIUS detector PRBs within the ROI:", det_ids)
+            print("CITIUS detector sensors within the ROI:", det_ids)
             is_citius = True
         except:
             update_status(status, "Status=Error-CITIUSFailedToGetDetectors")
-            raise RuntimeError("Found a CITIUS detector but failed to get PRB IDs.")
+            raise RuntimeError("Found a CITIUS detector but failed to get sensor IDs.")
     elif citius_status == ctdapy_xfel.CTDA_RUN_STATUS_WAIT_CALIB:
         update_status(status, "Status=Error-CITIUSNotYetReady")
         raise RuntimeError("Found a CITIUS detector but calibration is still underway. Please try again later.")
@@ -165,7 +167,8 @@ def run(params):
 
     # Setup buffer readers
     if is_citius:
-        detector = CITIUSDetector(det_ids, bl, runid, exposed_images[0])
+        detector_name = longnames[0][:-4]
+        detector = CITIUSDetector(det_ids, detector_name, bl, runid, exposed_images[0])
     else:
         detector = MPCCDDetector(det_ids, bl, runid, exposed_images[0])
 

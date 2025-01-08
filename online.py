@@ -33,6 +33,7 @@ def run(params):
     citius_roi = params.citius_roi
 
     # Get Run info
+    # TODO: use the latest when not specified
     try:
         run_info = dbpy.read_runinfo(bl, runid)
     except:
@@ -52,9 +53,12 @@ def run(params):
 
     # Find detectors
     citius_status = ctdapy_xfel.get_runstatus(bl ,runid)
+    print(citius_status)
     if citius_status == ctdapy_xfel.CTDA_RUN_STATUS_CAN_READ:
         try:
             ctrl_buf = ctolpy_xfel.CtrlBuffer(0) # TODO: conn_id
+            longnames = ctrl_buf.read_detidlist()
+            print("CITIUS detector available sensor full names:", longnames)
             det_ids_all = sorted(ctrl_buf.read_sensoridlist())
             print("CITIUS detector available sensor IDs:", det_ids_all)
             det_ids = CITIUSDetector.filter_prbs_by_roi(det_ids_all, citius_roi)
@@ -80,7 +84,8 @@ def run(params):
         shm = shared_memory.SharedMemory(name=OSTRICH_ONLINE_SHM_NAME, create=True, size=np.prod(buffer_shape) * np.dtype(np.float32).itemsize)
         shared_buffer = np.ndarray(buffer_shape, dtype=np.float32, buffer=shm.buf)
 
-        detector = CITIUSOnlineDetector(det_ids, shared_buffer[0, :, :, :])
+        detector_name = longnames[0][:-4]
+        detector = CITIUSOnlineDetector(det_ids, detector_name, shared_buffer[0, :, :, :])
     else:
         raise NotImplementedError("MPCCD is not supported.")
 

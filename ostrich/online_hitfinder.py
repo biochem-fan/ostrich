@@ -61,7 +61,7 @@ def hitfinding_worker(worker_id, hitfind_queue, result_queue, detector, shared_b
     from ostrich.inmemory_dxtbx import FormatSACLAInMemory
 
     clen = params.clen
-    adu_per_photon = 3.65 # * photon_energy
+    adu_per_photon = 3.65 * photon_energy
 
     shm = shared_memory.SharedMemory(OSTRICH_ONLINE_SHM_NAME)
     framebuffer = np.ndarray(shared_buffer_shape, dtype, buffer=shm.buf)

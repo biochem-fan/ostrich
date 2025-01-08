@@ -58,7 +58,8 @@ class Detector:
         raise NotImplementedError
 
 class CITIUSDetector(Detector):
-    def __init__(self, det_ids, bl, runid, first_tag):
+    def __init__(self, det_ids, det_longname, bl, runid, first_tag):
+        self.det_longname = det_longname
         super().__init__(det_ids, bl, runid, first_tag)
 
     def filter_prbs_by_roi(det_ids, roi="all"):
@@ -101,7 +102,7 @@ class CITIUSDetector(Detector):
         if self.buffers is not None:
             return
 
-        # CITIUS API uses only one buffer for alll PRBs
+        # CITIUS API uses only one buffer for alll sensors
         try:
             self.buffers = ctdapy_xfel.CtrlBuffer(self.bl, self.runid)
         except:
@@ -110,10 +111,10 @@ class CITIUSDetector(Detector):
         if self.geometry is None:
             self.read_detinfos()
 
-    def validate_and_set_geometry(det_infos):
+    def validate_and_set_geometry(det_infos, longname="CITIUS-20.2M-#UNK"):
         geometry = DetectorGeometry()
 
-        geometry.name = "CITIUS 20.2M"
+        geometry.name = longname
         geometry.width = ctdapy_xfel.CITIUS_IMAGE_WIDTH
         geometry.height = ctdapy_xfel.CITIUS_IMAGE_HEIGHT
         geometry.pixel_size = det_infos[0]['pixel_size_x']
@@ -127,7 +128,7 @@ class CITIUSDetector(Detector):
             panel = DetectorPanel()
             panel.name = "prb%02d" % det_info['id']
             # TODO: use ctdapy_xfel.CtrlBuffer.read_detidlist
-            panel.long_name = "CITIUS 20.2M PRB %02d" % det_info['id']
+            panel.long_name = "%s-%03d" % (longname, det_info['id'])
             panel.index = det_info['id']
             panel.pos_x = det_info['position_x']
             panel.pos_y = det_info['position_y']
@@ -158,7 +159,7 @@ class CITIUSDetector(Detector):
         for det_info, prb_id in zip(det_infos, self.det_ids):
             det_info['id'] = prb_id
 
-        self.geometry = CITIUSDetector.validate_and_set_geometry(det_infos)
+        self.geometry = CITIUSDetector.validate_and_set_geometry(det_infos, self.det_longname)
 
     def deallocate_readers(self):
         self.readers = None
