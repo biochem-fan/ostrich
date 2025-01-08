@@ -41,6 +41,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
     if is_citius:
         hitfinding_panels = CITIUSDetector.filter_prbs_by_roi(detector.det_ids, hitfinding_roi)
         in_hitfinding_roi = [det_id in hitfinding_panels for det_id in detector.det_ids]
+        citius_raw_buf = [np.zeros((detector.geometry.height, detector.geometry.width), dtype=np.float32) for i in range(npanels)]
 
     # Convert the pixel_mask to DIALS's flex array
     if pixel_mask is not None:
@@ -77,7 +78,9 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
                 if not in_hitfinding_roi[i]:
                     continue
 
-                image_buf[i] = detector.buffers.read_image(panel.index, tag) * (adu_per_photon * 3.65 / pulse_energy)
+                detector.buffers.read_image(citius_raw_buf[i], panel.index, tag)
+                citius_raw_buf[i] *= adu_per_photon * 3.65 / pulse_energy
+                image_buf[i] = citius_raw_buf[i]
 
         if False: # skip DIALS
             print(tag)
@@ -107,7 +110,9 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
         for i, panel in enumerate(detector.geometry.panels):
             if not is_citius or in_hitfinding_roi[i]:
                 continue
-            image_buf[i] = detector.buffers.read_image(panel.index, tag) * (adu_per_photon * 3.65 / pulse_energy)
+            detector.buffers.read_image(citius_raw_buf[i], panel.index, tag)
+            citius_raw_buf[i] *= adu_per_photon * 3.65 / pulse_energy
+            image_buf[i] = citius_raw_buf[i]
 
         if binning != 1:
             image_buf = [bin_image(img, binning) for img in image_buf]

@@ -126,6 +126,7 @@ class CITIUSDetector(Detector):
 
             panel = DetectorPanel()
             panel.name = "prb%02d" % det_info['id']
+            # TODO: use ctdapy_xfel.CtrlBuffer.read_detidlist
             panel.long_name = "CITIUS 20.2M PRB %02d" % det_info['id']
             panel.index = det_info['id']
             panel.pos_x = det_info['position_x']
