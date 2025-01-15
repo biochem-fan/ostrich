@@ -45,7 +45,7 @@ def image_reading_worker(worker_id, start_frame, read_queue, hitfinding_queue, d
             delta_prev = (cur_frame - prev_frame) / FRAME_NS
             delta_req = (cur_frame - next_frame) / FRAME_NS
             prev_frame = cur_frame
-            frame_idx = (((cur_frame - start_frame) / (FRAME_NS * nproc_reader))) # TODO: not right!
+            frame_idx = ((cur_frame - start_frame) / (FRAME_NS * nproc_reader))
             print("Reader %d retrieved frame %d (req %d) to slot %d, delta prev = %f, delta req = %f, frame idx = %f, %d" %
                       (worker_id, cur_frame, next_frame, slot, delta_prev, delta_req, frame_idx, np.round(frame_idx)))
             if delta_req > 0.3:

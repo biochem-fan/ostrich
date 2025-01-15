@@ -2,9 +2,14 @@
 # written by Takanori Nakane at Osaka University
 
 from numpy import pi
-import ctdapy_xfel
 import re
 import stpy
+
+# ctdapy_xfel is not available in anapc
+try:
+    import ctdapy_xfel
+except:
+    pass
 
 def bin_image(img, binning):
     assert img.ndim == 2
@@ -114,9 +119,9 @@ class CITIUSDetector(Detector):
     def validate_and_set_geometry(det_infos, longname="CITIUS-20.2M-#UNK"):
         geometry = DetectorGeometry()
 
+        # WARNING: this function does not set up width and height, because
+        # they are different between ctdapy_xfel and ctolpy_xfel.
         geometry.name = longname
-        geometry.width = ctdapy_xfel.CITIUS_IMAGE_WIDTH
-        geometry.height = ctdapy_xfel.CITIUS_IMAGE_HEIGHT
         geometry.pixel_size = det_infos[0]['pixel_size_x']
         geometry.thickness = 650
 
@@ -160,6 +165,8 @@ class CITIUSDetector(Detector):
             det_info['id'] = prb_id
 
         self.geometry = CITIUSDetector.validate_and_set_geometry(det_infos, self.det_longname)
+        self.geometry.width = ctdapy_xfel.CITIUS_IMAGE_WIDTH
+        self.geometry.height = ctdapy_xfel.CITIUS_IMAGE_HEIGHT
 
     def deallocate_readers(self):
         self.readers = None

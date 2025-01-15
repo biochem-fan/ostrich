@@ -35,7 +35,6 @@ class CITIUSOnlineDetector():
             det_info['id'] = prb_id
 
         self.geometry = CITIUSDetector.validate_and_set_geometry(det_infos, self.det_longname)
-        # The above function uses constants in the offline API, so we have to apply binning.
         _, _, self.geometry.width, self.geometry.height = self.ctrl_buffer.read_binninginfo()
 
     def deallocate_readers(self):

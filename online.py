@@ -14,7 +14,6 @@ import sys
 import traceback
 
 # SACLA APIs
-import ctdapy_xfel
 import ctolpy_xfel
 import dbpy
 
@@ -52,22 +51,17 @@ def run(params):
     print("Configured photon energy: %f eV\n" % config_photon_energy)
 
     # Find detectors
-    citius_status = ctdapy_xfel.get_runstatus(bl ,runid)
-    print(citius_status)
-    if citius_status == ctdapy_xfel.CTDA_RUN_STATUS_CAN_READ:
-        try:
-            ctrl_buf = ctolpy_xfel.CtrlBuffer(0) # TODO: conn_id
-            longnames = ctrl_buf.read_detidlist()
-            print("CITIUS detector available sensor full names:", longnames)
-            det_ids_all = sorted(ctrl_buf.read_sensoridlist())
-            print("CITIUS detector available sensor IDs:", det_ids_all)
-            det_ids = CITIUSDetector.filter_prbs_by_roi(det_ids_all, citius_roi)
-            print("CITIUS detector sensos within the ROI:", det_ids)
-            is_citius = True
-        except:
-            update_status(status, "Status=Error-CITIUSFailedToGetDetectors")
-            raise RuntimeError("Found a CITIUS detector but failed to get sensor IDs.")
-    else:
+    try:
+        ctrl_buf = ctolpy_xfel.CtrlBuffer(0) # TODO: conn_id
+        longnames = ctrl_buf.read_detidlist()
+        print("CITIUS detector available sensor full names:", longnames)
+        det_ids_all = sorted(ctrl_buf.read_sensoridlist())
+        print("CITIUS detector available sensor IDs:", det_ids_all)
+        det_ids = CITIUSDetector.filter_prbs_by_roi(det_ids_all, citius_roi)
+        print("CITIUS detector sensos within the ROI:", det_ids)
+        is_citius = True
+    except:
+        update_status(status, "Status=Error-CITIUSFailedToGetDetectors")
         raise NotImplementedError("MPCCD is not supported.")
     print()
 
