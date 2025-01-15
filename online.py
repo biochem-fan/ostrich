@@ -24,7 +24,7 @@ from ostrich.geometry import *
 from ostrich.online_hitfinder import find_hits
 
 def run(params):
-    runid = params.runid
+    photon_energy = params.photon_energy
     bl = params.bl
     clen = params.clen
     framebuffer_size = params.framebuffer_size
@@ -32,23 +32,14 @@ def run(params):
     citius_roi = params.citius_roi
 
     # Get Run info
-    # TODO: use the latest when not specified
-    try:
-        run_info = dbpy.read_runinfo(bl, runid)
-    except:
-        update_status(status, "Status=Error-BadRunID")
-        raise RuntimeError("Failed to get the run information. Probably the requested run does not exist.")
-    high_tag = dbpy.read_hightagnumber(bl, runid)
-    tags = dbpy.read_taglist_byrun(bl, runid)
-    start_time = datetime.datetime.fromtimestamp(dbpy.read_starttime(bl, runid), tz=datetime.timezone.utc).isoformat()
-    end_time = datetime.datetime.fromtimestamp(dbpy.read_stoptime(bl, runid), tz=datetime.timezone.utc).isoformat()
-    print("Collecting metadata from the run %d" % runid)
-    print("Run %d: HighTag %d, Tags %d - %d (inclusive) with %d images" % (runid, high_tag, tags[0], tags[-1], len(tags)))
-    print("Run time: %s to %s" % (start_time, end_time))
-
-    # Collect pulse energies
-    config_photon_energy = 1000.0 * dbpy.read_config_photonenergy(bl, runid)
-    print("Configured photon energy: %f eV\n" % config_photon_energy)
+    runid = dbpy.read_runnumber_newest(bl)
+    #runid = 216241 # debug using simulator
+    if photon_energy == libtbx.Auto:
+        comment = dbpy.read_comment(bl, runid)
+        photon_energy = 1000.0 * dbpy.read_config_photonenergy(bl, runid)
+        print("Read the configured photon energy as %.1f eV from run %d (%s).\n" % (photon_energy, runid, comment))
+    else:
+        print("Using the specified photon energy %.1f eV." % photon_energy)
 
     # Find detectors
     try:
@@ -99,14 +90,14 @@ def run(params):
 
     output_filename = "online-debug.h5"
     # TODO: binning is set to 1 because detector.geometry is already binned! This is irrelevant for NeXuS
-    write_crystfel_geom("online.geom", True, detector.geometry, config_photon_energy, adu_per_photon, clen, runid, beam_center, 1)
-    write_nexus(output_filename, detector.geometry, bl, runid, "Online Debug", start_time, end_time, clen, adu_per_photon, binned_pixel_mask, beam_center, binning)
+    write_crystfel_geom("online.geom", True, detector.geometry, photon_energy, adu_per_photon, clen, runid, beam_center, 1)
+    #write_nexus(output_filename, detector.geometry, bl, runid, "Online Debug", start_time, end_time, clen, adu_per_photon, binned_pixel_mask, beam_center, binning)
     print()
 
     # Make a boolean mask for DIALS hit finder. Note that hit finder uses non-binned images.
     pixel_mask = np.split(pixel_mask == 0, len(detector.geometry.panels), axis=0)
 
-    find_hits(detector, shared_buffer, config_photon_energy, pixel_mask, params)
+    find_hits(detector, shared_buffer, photon_energy, pixel_mask, params)
 
 phil_str = '''
 bl = 2
@@ -117,13 +108,9 @@ clen = 50.0
  .help = Detector distance in millimeter
  .type = float(value_min = 0)
 
-hit_threshold = 20
- .help = Minimum number of spots to consider an image to be hit (inclusive)
- .type = int(value_min = 0)
-
-runid = 216241
- .help = Run ID to process
- .type = int(value_min = 0)
+photon_energy = Auto
+ .help = Photon energy in eV. Leave this Auto to retrieve from the latest run.
+ .type = float(value_min = 1000, value_max = 20000)
 
 status = ""
  .help = File name for status log (for integration with Ostrich Dispatcher GUI)
@@ -183,9 +170,11 @@ if __name__ == "__main__":
     print(" by Takanori Nakane at Institute of Protein Research, Osaka University")
     print()
     print("Option: bl                = %d" % params.bl)
-    print("Option: runid             = %d" % params.runid)
+    if params.photon_energy == libtbx.Auto:    
+        print("Option: photon_energy     = Auto (read from the latest run)")
+    else:
+        print("Option: photon_energy     = %.1f eV" % params.photon_energy)
     print("Option: clen              = %.1f mm" % params.clen)
-    print("Option: hit_threshold     = %d" % params.hit_threshold)
     print("Option: framebuffer_size  = %d" % params.framebuffer_size)
     print("Option: nproc_hihtfinder  = %d" % params.nproc_hitfinder)
     print("Option: nproc_reader      = %d" % params.nproc_reader)
