@@ -26,7 +26,6 @@ import wx
 import wx.grid
 import wx.lib.newevent
 
-PARALLEL_SIZE = 3
 NPROC = 16
 SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-17-0/dials_env.sh"
 OSTRICH_PATH = "~sacla_sfx_app/packages/ostrich"
@@ -593,7 +592,7 @@ class MainWindow(wx.Frame):
                     subjobs.append("dark%d" % i)
         else:
             subjobs.append("0")
-            for i in range(1, PARALLEL_SIZE):
+            for i in range(1, self.opts.nblock):
                 subjobs.append("%d" % i)
 
         crystfel_args = self.opts.crystfel_args + " " + self.loadCrystFELArgs()
@@ -607,7 +606,7 @@ class MainWindow(wx.Frame):
             os.mkdir(run_dir)
             f = open("%s/run.sh" % run_dir, "w")
             f.write(job_script.format(runid=runid, runname=run_dir, clen=self.opts.clen,
-                                      nproc=NPROC, nblock=PARALLEL_SIZE, runtype=subjob,
+                                      nproc=NPROC, nblock=self.opts.nblock, runtype=subjob,
                                       queuename=self.opts.queue, arguments=arguments,
                                       crystfel_args=crystfel_args, beamline=bl,
                                       setup_script=SETUP_SCRIPT, ostrich_path=OSTRICH_PATH,
@@ -776,6 +775,7 @@ parser.add_option("--bl", dest="bl", type=int, default=2, help="Beamline")
 parser.add_option("--clen", dest="clen", type=float, default=50.0, help="camera length in mm")
 parser.add_option("--quick", dest="quick", type=int, default=False, help="enable quick mode")
 parser.add_option("--queue", dest="queue", type=str, default="serial", help="queue name")
+parser.add_option("--nblock", dest="nblock", type=int, default=3, help="number of sub-jobs for non-time-resolved experiments")
 parser.add_option("--max_jobs", dest="max_jobs", type=int, default=14, help="maximum number of jobs to submit when --quick is enabled")
 parser.add_option("--pd1_name", dest="pd1_name", type=str, default=None, help="PD1 sensor name e.g. xfel_bl_3_st_4_pd_laser_fitting_peak/voltage")
 # e.g. xfel_bl_3_st_4_pd_user_10_fitting_peak/voltage
@@ -825,6 +825,7 @@ print("Option: monitor          = %s" % opts.monitor)
 print("Option: bl               = %d" % opts.bl)
 print("Option: clen             = %f mm" % opts.clen)
 print("Option: quick            = %s" % opts.quick)
+print("Option: nblock           = %s" % opts.nblock)
 print("Option: max_jobs         = %s" % opts.max_jobs)
 print("Option: queue            = %s" % opts.queue)
 print("Option: pd1_name         = %s" % opts.pd1_name)
