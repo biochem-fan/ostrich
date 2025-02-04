@@ -13,7 +13,7 @@ from dxtbx.imageset import ImageSet, ImageSetData, MemReader
 from dxtbx.model.experiment_list import ExperimentListFactory
 from scitbx import matrix
 
-from ostrich import update_status, OSTRICH_ONLINE_SHM_NAME
+from ostrich import OSTRICH_ONLINE_SHM_NAME
 from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image
 
 FRAME_NS = int(1E9 / 30.0) # 30 FPS
@@ -101,7 +101,6 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
     nproc_reader = params.nproc_reader
     nproc_hitfinder = params.nproc_hitfinder
     framebuffer_size = params.framebuffer_size
-    status = params.status
 
     xsize = detector.geometry.width
     ysize = detector.geometry.height
@@ -123,6 +122,8 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
     info = detector.ctrl_buffer.collect_data(shared_buffer[0, :, :, :,], detector.det_ids, ctolpy_xfel.NEWEST)
     cur_frame = info['data_time']
     print("Base time %d" % cur_frame)
+
+    logfile = open("spotcount-from-%d.log" % cur_frame, "a")
 
     # Create hitfinding workers
     detector.deallocate_readers()
@@ -155,6 +156,9 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
         n_processed += 1
 
         print("%4d processed, current tag = %d with %d spot(s)" % (n_processed, cur_frame, n_spots))
+        logfile.write("%d %d\n" % (cur_frame, n_spots))
+        if (n_processed % 30 == 0):
+            logfile.flush()
         read_queue.put(slot)
 
     [t.join() for t in workers]

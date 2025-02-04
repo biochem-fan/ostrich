@@ -17,7 +17,7 @@ import traceback
 import ctolpy_xfel
 import dbpy
 
-from ostrich import VERSION, update_status, OSTRICH_ONLINE_SHM_NAME
+from ostrich import VERSION, OSTRICH_ONLINE_SHM_NAME
 from ostrich.detector import CITIUSDetector, MPCCDDetector
 from ostrich.online_detector import CITIUSOnlineDetector
 from ostrich.geometry import *
@@ -28,7 +28,6 @@ def run(params):
     bl = params.bl
     clen = params.clen
     framebuffer_size = params.framebuffer_size
-    status = params.status
     citius_roi = params.citius_roi
 
     # Get Run info
@@ -52,7 +51,6 @@ def run(params):
         print("CITIUS detector sensos within the ROI:", det_ids)
         is_citius = True
     except:
-        update_status(status, "Status=Error-CITIUSFailedToGetDetectors")
         raise NotImplementedError("MPCCD is not supported.")
     print()
 
@@ -111,10 +109,6 @@ clen = 50.0
 photon_energy = Auto
  .help = Photon energy in eV. Leave this Auto to retrieve from the latest run.
  .type = float(value_min = 1000, value_max = 20000)
-
-status = ""
- .help = File name for status log (for integration with Ostrich Dispatcher GUI)
- .type = str
 
 framebuffer_size = 10
  .help = Number of frames in the buffer
@@ -178,7 +172,6 @@ if __name__ == "__main__":
     print("Option: framebuffer_size  = %d" % params.framebuffer_size)
     print("Option: nproc_hihtfinder  = %d" % params.nproc_hitfinder)
     print("Option: nproc_reader      = %d" % params.nproc_reader)
-    print("Option: status            = %s" % params.status)
     print("Option: citius_roi        = %s" % params.citius_roi)
     print("Option: hitfinding_roi    = %s" % params.hitfinding_roi)
     print()
@@ -186,14 +179,4 @@ if __name__ == "__main__":
     try:
         run(params)
     except:
-        # Do not overwrite an existing detailed error message by a general message.
-        already_reported = False
-        if params.status != "":
-            if os.path.exists(params.status):
-                with open(params.status) as f:
-                    if "Error" in f.read():
-                        already_reported = True
-        if not already_reported:
-            update_status(params.status, "Status=Error-PleaseCheckLog")
-
         print(traceback.format_exc())
