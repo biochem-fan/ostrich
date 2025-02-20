@@ -72,14 +72,10 @@ def run(params):
     else:
         raise NotImplementedError("MPCCD is not supported.")
 
-    # Create geometry files
-
-    # The origin of MPCCD panels is roughy the beam center but that of CITIUS
-    # is at the top left corner as of 2024A. This might change in the future.
-    if is_citius:
-        beam_center = (165.6, 206.9) # x, y in mm, NeXus-McStats system
-    else:
-        beam_center = (0.0, 0,0)
+    # For old data in simulator:
+    # Note that this affects only the test geometry files, NOT hit finding.
+    # Take care when using the radial profile and/or resolution filters.
+    # beam_center = (165.6, 206.9) # x, y in mm, NeXus-McStats system
 
     adu_per_photon = 10 # TODO: fixme
     # Write metadata
@@ -88,7 +84,7 @@ def run(params):
 
     output_filename = "online-debug.h5"
     # TODO: binning is set to 1 because detector.geometry is already binned! This is irrelevant for NeXuS
-    write_crystfel_geom("online.geom", True, detector.geometry, photon_energy, adu_per_photon, clen, runid, beam_center, 1)
+    # write_crystfel_geom("online.geom", True, detector.geometry, photon_energy, adu_per_photon, clen, runid, beam_center, 1)
     #write_nexus(output_filename, detector.geometry, bl, runid, "Online Debug", start_time, end_time, clen, adu_per_photon, binned_pixel_mask, beam_center, binning)
     print()
 

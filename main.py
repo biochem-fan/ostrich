@@ -180,9 +180,11 @@ def run(params):
 
     # Create geometry files
 
-    # The origin of MPCCD panels is roughy the beam center but that of CITIUS
-    # is at the top left corner as of 2024A. This might change in the future.
-    if is_citius:
+    # The origin of CITIUS panels was the top left corner until 2024/11/18.
+    # This has been changed to the beam center (same as MPCCD) since then.
+    if is_citius and bl == 2 and runid < 223251:
+        # NOTE that this fudge affects geometry files but not hit finding.
+        # Take care when using the radial profile and/or resolution filters.
         beam_center = (165.6, 206.9) # x, y in mm, NeXus-McStats system
     else:
         beam_center = (0.0, 0,0)
@@ -243,6 +245,7 @@ def run(params):
     print()
 
     photon_energies_target = pulse_energies[exposed][right_type]
+    # TODO: Allow non-zero beam center. This is necessary for radial profiles on detector shifted experiments
     find_hits(detector, target_images, photon_energies_target, output_filename, dark_average, pixel_mask, params)
 
 phil_str = '''
