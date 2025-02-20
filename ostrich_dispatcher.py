@@ -55,17 +55,17 @@ hostname > job.host
 ShowRunInfo -b {beamline} -r {runid} > run.info
 
 TIME_START=`date +%s`
-dials.python {ostrich_path}/main.py runid={runid} bl={beamline} status=status.txt \
-   runtype={runtype} nproc={nproc} nblock={nblock} \
+dials.python {ostrich_path}/main.py runid={runid} bl={beamline} status=status.txt \\
+   runtype={runtype} nproc={nproc} nblock={nblock} clen={clen} \\
    {arguments} 2>&1 >> ostrich.log
 TIME_OSTRICH=`date +%s`
 
 # --xgandalf-sampling-pitch=2 --xgandalf-grad-desc-iterations=3 is equivalent to --xgandalf-fast-execution
 # but setting in this way allows one to "disable" it in crystfel.args by overriding by the default
 # --xgandalf-sampling-pitch=6 --xgandalf-grad-desc-iterations=4.
-{crystfel_path}/indexamajig -g {runid}.geom -o {runname}.stream -j {nproc} -i - \
-   --indexing=xgandalf --xgandalf-sampling-pitch=2 --xgandalf-grad-desc-iterations=3 \
-   --peaks=peakfinder8 --threshold=100 --min-snr=5 --min-pix-count=2 --local-bg-radius=3 --int-radius=3,4,7 \
+{crystfel_path}/indexamajig -g {runid}.geom -o {runname}.stream -j {nproc} -i - \\
+   --indexing=xgandalf --xgandalf-sampling-pitch=2 --xgandalf-grad-desc-iterations=3 \\
+   --peaks=peakfinder8 --threshold=100 --min-snr=5 --min-pix-count=2 --local-bg-radius=3 --int-radius=3,4,7 \\
    {crystfel_args} <<EOF
 run{runname}.h5
 EOF
@@ -758,7 +758,7 @@ class ProgressCellRenderer(wx.grid.GridCellRenderer):
         return ProgressCellRenderer() 
 
 print()
-print("Ostrich dispatcher GUI version 20241011")
+print("Ostrich dispatcher GUI version 20250220")
 print("   by Takanori Nakane (tnakane.protein@osaka-u.ac.jp)")
 print()
 print("Please cite the following paper when you use this software.")
