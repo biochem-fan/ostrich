@@ -28,7 +28,7 @@ class DetectorPanel:
         self.pos_y = 0.0 # um
         self.pos_z = 0.0 # um
         self.rotation = 0.0 # rad
-        self.gain = 1.0
+        self.gain = 1.0 # e/ADU
 
 class DetectorGeometry:
     def __init__(self):
@@ -139,7 +139,7 @@ class CITIUSDetector(Detector):
             panel.pos_y = det_info['position_y']
             panel.pos_z = det_info['position_z']
             panel.rotation = det_info['position_theta'] * pi / 180.0
-            panel.gain = 1.0 # already normalized to the number of electrons by API
+            panel.gain = 40 # 1 ADU = 40 electrons
             geometry.panels.append(panel)
 
         # Analyze 2 x 4 SSS (Sensor Sub System) blocks, each containing 3x3 panels
@@ -165,6 +165,10 @@ class CITIUSDetector(Detector):
             det_info['id'] = prb_id
 
         self.geometry = CITIUSDetector.validate_and_set_geometry(det_infos, self.det_longname)
+        if self.bl == 2 and self.runid < 228000:
+            for panel in self.geometry.panels:
+                panel.gain = 1.0 # Old data
+
         self.geometry.width = ctdapy_xfel.CITIUS_IMAGE_WIDTH
         self.geometry.height = ctdapy_xfel.CITIUS_IMAGE_HEIGHT
 

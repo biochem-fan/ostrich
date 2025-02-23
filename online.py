@@ -73,9 +73,12 @@ def run(params):
         raise NotImplementedError("MPCCD is not supported.")
 
     # For old data in simulator:
-    # Note that this affects only the test geometry files, NOT hit finding.
+    # Note that this beam center affects only the test geometry files, NOT hit finding.
     # Take care when using the radial profile and/or resolution filters.
-    # beam_center = (165.6, 206.9) # x, y in mm, NeXus-McStats system
+    if False:
+        beam_center = (165.6, 206.9) # x, y in mm, NeXus-McStats system
+        for panel in detector.geometry.panels:
+            panel.gain = 1.0
 
     adu_per_photon = 10 # TODO: fixme
     # Write metadata

@@ -61,7 +61,6 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
                 reader.collect(buf, tag)
 
             # We quantize such that one photon is adu_per_photon output (i.e. DIALS's gain = 1 / adu_per_photon by definition).
-            #
             # ValuesInFile = N_photon * adu_per_photon
             #  = CameraValueFromAPI [ADU] * GainSacla [e-/ADU] / (E_photon [eV] / 3.65 [eV/e-]) * adu_per_photon
             # CameraValueFromAPI = N_photon * E_photon / 3.65 / G
