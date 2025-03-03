@@ -4,6 +4,7 @@
 from multiprocessing import Process, Queue
 import numpy as np
 from ostrich import update_status
+from ostrich.detector import SI_eV_per_ELECTRON
 
 import stpy
 
@@ -29,7 +30,7 @@ def add_image_par(read_queue, result_queue, detector, adu_per_photon):
                 for i in range(npanels):
                     detector.readers[i].collect(detector.buffers[i], tag)
                     data = detector.buffers[i].read_det_data(0)
-                    data *= gains[i] * 3.65 * adu_per_photon / energy
+                    data *= gains[i] * SI_eV_per_ELECTRON * adu_per_photon / energy
                     local_buffer[(ysize * i):(ysize * (i + 1)),] += data
             except Exception as e:
                 print(e)

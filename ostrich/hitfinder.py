@@ -15,7 +15,7 @@ from dxtbx.model.experiment_list import ExperimentListFactory
 from scitbx import matrix
 
 from ostrich import update_status
-from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image
+from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image, SI_eV_per_ELECTRON
 
 def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dark_average, pixel_mask, params):
     from dials.array_family import flex
@@ -60,15 +60,17 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
             for reader, buf in zip(detector.readers, detector.buffers):
                 reader.collect(buf, tag)
 
-            # We quantize such that one photon is adu_per_photon output (i.e. DIALS's gain = 1 / adu_per_photon by definition).
-            # ValuesInFile = N_photon * adu_per_photon
-            #  = CameraValueFromAPI [ADU] * GainSacla [e-/ADU] / (E_photon [eV] / 3.65 [eV/e-]) * adu_per_photon
-            # CameraValueFromAPI = N_photon * E_photon / 3.65 / G
-            # 3.65 is the energy required to make an electron-hole pair in silicon.
+            # We quantize such that one photon is adu_per_photon output
+            #  (i.e. DIALS's gain = 1 / adu_per_photon by definition).
+            # ValuesInOutputFile = N_photon * adu_per_photon
+            #  = CameraValueFromAPI [ADU] * GainSacla [e-/ADU]
+            #    / (E_photon [eV] / SI_eV_per_ELECTRON [eV/e-]) * adu_per_photon
+            # CameraValueFromAPI = N_photon * E_photon / SI_eV_per_ELECTRON / G
+            #
+            # SI_eV_per_ELECTRON (~ 3.65) is the energy required to make an electron-hole pair in silicon.
             # SACLA's gain (G) is the number of electron-hole pair per ADU, while DIALS's gain is photon/ADU.
-            # For CITIUS, G = 1.00, since the values from API are normalized to the number of electrons.
 
-            image_buf = [buf.read_det_data(0) * (gain * 3.65 * adu_per_photon / pulse_energy) - dark \
+            image_buf = [buf.read_det_data(0) * (gain * SI_eV_per_ELECTRON * adu_per_photon / pulse_energy) - dark \
                          for gain, buf, dark in zip(gains, detector.buffers, dark_average)]
         else:
             image_buf = [None] * len(detector.geometry.panels)
@@ -78,7 +80,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
                     continue
 
                 detector.buffers.read_image(citius_raw_buf[i], panel.index, tag)
-                citius_raw_buf[i] *= adu_per_photon * 3.65 / pulse_energy
+                citius_raw_buf[i] *= gains[i] * SI_eV_per_ELECTRON * adu_per_photon / pulse_energy
                 image_buf[i] = citius_raw_buf[i]
 
         if False: # skip DIALS
@@ -110,7 +112,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
             if not is_citius or in_hitfinding_roi[i]:
                 continue
             detector.buffers.read_image(citius_raw_buf[i], panel.index, tag)
-            citius_raw_buf[i] *= adu_per_photon * 3.65 / pulse_energy
+            citius_raw_buf[i] *= gains[i] * SI_eV_per_ELECTRON * adu_per_photon / pulse_energy
             image_buf[i] = citius_raw_buf[i]
 
         if binning != 1:

@@ -11,6 +11,8 @@ try:
 except:
     pass
 
+SI_eV_per_ELECTRON = 3.65
+
 def bin_image(img, binning):
     assert img.ndim == 2
     assert img.shape[0] % binning == 0
