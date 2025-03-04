@@ -26,8 +26,9 @@ import wx
 import wx.grid
 import wx.lib.newevent
 
+VERSION = "250304"
 NPROC = 16
-SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-17-0/dials_env.sh"
+SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-23-0/dials_env.sh"
 OSTRICH_PATH = "~sacla_sfx_app/packages/ostrich"
 CRYSTFEL_PATH = "~sacla_sfx_app/packages/crystfel-0.10.2/build"
 
@@ -226,8 +227,9 @@ class MainWindow(wx.Frame):
 
     MENU_KILLJOB = 0
     MENU_HDFSEE = 1
-    MENU_CELLEXPLORER = 2
-    MENU_COUNTSUMS = 3
+    MENU_DIALSVIEWER = 2
+    MENU_CELLEXPLORER = 3
+    MENU_COUNTSUMS = 4
 
     COLOUR_BAD = (252, 124, 0)
     COLOUR_GOOD = (124, 252, 0)
@@ -242,7 +244,7 @@ class MainWindow(wx.Frame):
         if nogui:
             return
 
-        title = "Ostrich Dispatcher on " + os.getcwd()
+        title = "Ostrich Dispatcher (ver " + VERSION + ") on " + os.getcwd()
         wx.Frame.__init__(self, parent, title=title, size=(900,750))
         self.table = wx.grid.Grid(self, size=(900, -1))
         self.table.CreateGrid(0, 7, wx.grid.Grid.SelectRows) # row, column
@@ -365,10 +367,12 @@ class MainWindow(wx.Frame):
         
         point = event.GetPosition()
         popupmenu = wx.Menu()
-        killjob = popupmenu.Append(MainWindow.MENU_KILLJOB, "Kill this job")
-        hdfsee = popupmenu.Append(MainWindow.MENU_HDFSEE, "View hits")
-        hdfsee = popupmenu.Append(MainWindow.MENU_CELLEXPLORER, "Check cell")
-        hdfsee = popupmenu.Append(MainWindow.MENU_COUNTSUMS, "Count sums")
+        popupmenu.Append(MainWindow.MENU_KILLJOB, "Kill this job")
+        popupmenu.Append(MainWindow.MENU_HDFSEE, "View hits in hdfsee")
+        popupmenu.Append(MainWindow.MENU_DIALSVIEWER, "View hits in DIALS")
+        popupmenu.Append(MainWindow.MENU_CELLEXPLORER, "Check cell")
+        popupmenu.Append(MainWindow.MENU_COUNTSUMS, "Count sums")
+        # TODO: disable "Check cell" while running
         self.table.Bind(wx.EVT_MENU, lambda event: self.OnPopupmenuSelected(event, runname))
         self.table.PopupMenu(popupmenu, point)
 
@@ -379,6 +383,8 @@ class MainWindow(wx.Frame):
             self.KillJob(runname)
         elif id == MainWindow.MENU_HDFSEE:
             self.HDFsee(runname)
+        elif id == MainWindow.MENU_DIALSVIEWER:
+            self.DIALSviewer(runname)
         elif id == MainWindow.MENU_CELLEXPLORER:
             self.CellExplorer(runname)
         elif id == MainWindow.MENU_COUNTSUMS:
@@ -428,7 +434,8 @@ class MainWindow(wx.Frame):
         dlg.Destroy()
 
     def HDFsee(self, runname):
-        # FIXME: warn when multiple rows are selected
+        # TODO: warn when multiple rows are selected
+        # TODO: use bin 2 for MPCCD, bin 4 for CITIUS
         geometry = runname[:runname.find("-")] + ".geom"
         if not os.path.exists(runname + "/" + geometry): # backward compatibility with old Cheetah pipeline
             geometry = runname + ".geom"
@@ -442,8 +449,17 @@ class MainWindow(wx.Frame):
 
         threading.Thread(target=launchHDFsee).start()
 
+    def DIALSviewer(self, runname):
+        # TODO: warn when multiple rows are selected
+
+        def launchDIALSviewer():
+            command = "dials.image_viewer {runname}/run{runname}.h5 &".format(runname=runname)
+            os.system(command)
+
+        threading.Thread(target=launchDIALSviewer).start()
+
     def CellExplorer(self, runname):
-        # FIXME: warn when multiple rows are selected
+        # TODO: warn when multiple rows are selected
         def launchCellExplorer():
             command = "cd {runname}; cell_explorer {runname}.stream &".format(runname=runname)
             os.system(command)
@@ -758,7 +774,7 @@ class ProgressCellRenderer(wx.grid.GridCellRenderer):
         return ProgressCellRenderer() 
 
 print()
-print("Ostrich dispatcher GUI version 20250220")
+print("Ostrich dispatcher GUI version", VERSION)
 print("   by Takanori Nakane (tnakane.protein@osaka-u.ac.jp)")
 print()
 print("Please cite the following paper when you use this software.")
