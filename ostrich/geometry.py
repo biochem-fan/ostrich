@@ -110,7 +110,7 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
             out.write("%s/ss = %fx %+fy\n" % (name, -math.sin(rotation), -math.cos(rotation)))
             out.write("%s/corner_x = %f\n" % (name, (-detx + 1000 * beam_center[0]) / pixel_size)) # px
             out.write("%s/corner_y = %f\n" % (name, (dety + 1000 * beam_center[1]) / pixel_size)) # px
-            out.write("%s/coffset = %f\n\n" % (name, detz * 1E-6)) # m
+            out.write("%s/coffset = %f\n\n" % (name, -detz * 1E-6)) # m
 
         border, outer_border = get_border(geometry.name)
         border = int(np.ceil(border / binning))
@@ -194,45 +194,6 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
                 out.write("badport7/min_ss = 6144\n")
                 out.write("badport7/max_ss = 7167\n")
                 out.write("badport7/panel  = q7\n\n")
-
-# WARNING: Deprecated. This does not support the beam center
-def write_cheetah_geom(filename, geometry, binning=1):
-    assert geometry.width % binning == 0
-    assert geometry.height % binning == 0
-
-    xsize = geometry.width // binning
-    ysize = geometry.height // binning
-    pixel_size = geometry.pixel_size * binning
-
-    npanels = len(geometry.panels)
-    posx = np.zeros((ysize * npanels, xsize), dtype=np.float32)
-    posy = posx.copy()
-    posz = posx.copy()
-
-    for i, panel in enumerate(geometry.panels):
-        gain = panel.gain
-        detx = panel.pos_x * 1E-6 # m
-        dety = panel.pos_y * 1E-6
-        detz = panel.pos_z * 1E-6
-        rotation = panel.rotation
-        pixel_size *= 1E-6 # m
-
-        fast_x = math.cos(rotation) * pixel_size
-        fast_y = math.sin(rotation) * pixel_size;
-        slow_x = -math.sin(rotation) * pixel_size
-        slow_y = math.cos(rotation) * pixel_size;
-
-        y = np.arange(ysize)
-        for x in range(xsize):
-            posx[i * ysize + y, x] = fast_x * x + slow_x * y - detx
-            posy[i * ysize + y, x] = -(fast_y * x + slow_y * y + dety)
-            posz[i * ysize + y, x] = 0
-
-    f = h5py.File(filename, "w")
-    f.create_dataset("x", data=posx, compression="gzip", shuffle=True)
-    f.create_dataset("y", data=posy, compression="gzip", shuffle=True)
-    f.create_dataset("z", data=posz, compression="gzip", shuffle=True)
-    f.close()
 
 # Returns (border, outer_border)
 # outer_border is along the fast edge at the largest slow values

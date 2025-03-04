@@ -190,7 +190,6 @@ def run(params):
         beam_center = (0.0, 0,0)
 
     write_crystfel_geom("%d.geom" % runid, use_nexus, detector.geometry, mean_energy, adu_per_photon, clen, runid, beam_center, binning)
-    # write_cheetah_geom("%d-geom.h5" % runid, detector.geometry)
 
     # Write metadata
     pixel_mask = make_pixelmask(detector.geometry, runid)
