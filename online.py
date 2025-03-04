@@ -48,7 +48,7 @@ def run(params):
         det_ids_all = sorted(ctrl_buf.read_sensoridlist())
         print("CITIUS detector available sensor IDs:", det_ids_all)
         det_ids = CITIUSDetector.filter_prbs_by_roi(det_ids_all, citius_roi)
-        print("CITIUS detector sensos within the ROI:", det_ids)
+        print("CITIUS detector sensors within the ROI:", det_ids)
         is_citius = True
     except:
         raise NotImplementedError("MPCCD is not supported.")
@@ -75,12 +75,13 @@ def run(params):
     # For old data in simulator:
     # Note that this beam center affects only the test geometry files, NOT hit finding.
     # Take care when using the radial profile and/or resolution filters.
-    if False:
+    # This test data is from Run 216157 tag 628776479 - 628776581.
+    if True:
         beam_center = (165.6, 206.9) # x, y in mm, NeXus-McStats system
         for panel in detector.geometry.panels:
             panel.gain = 1.0
 
-    adu_per_photon = 10 # TODO: fixme
+    adu_per_photon = 10 # dummy value for geometry output (debug use only)
     # Write metadata
     pixel_mask = make_pixelmask(detector.geometry, runid)
     binned_pixel_mask = make_pixelmask(detector.geometry, runid, binning)

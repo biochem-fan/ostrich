@@ -14,7 +14,7 @@ from dxtbx.model.experiment_list import ExperimentListFactory
 from scitbx import matrix
 
 from ostrich import OSTRICH_ONLINE_SHM_NAME
-from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image
+from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image, SI_eV_per_ELECTRON
 
 FRAME_NS = int(1E9 / 30.0) # 30 FPS
 
@@ -27,7 +27,6 @@ def image_reading_worker(worker_id, start_frame, read_queue, hitfinding_queue, d
     detector.allocate_ctrl_buffer()
     xsize = detector.geometry.width
     ysize = detector.geometry.height
-    gains = [panel.gain for panel in detector.geometry.panels]
 
     frame_idx = 0
     prev_frame = start_frame
@@ -61,7 +60,9 @@ def hitfinding_worker(worker_id, hitfind_queue, result_queue, detector, shared_b
     from ostrich.inmemory_dxtbx import FormatSACLAInMemory
 
     clen = params.clen
-    adu_per_photon = 3.65 * photon_energy
+    # In CITIUS, gains for all panels are the same (already normalized by the API)
+    gain = detector.geometry.panels[0].gain
+    adu_per_photon = photon_energy / (SI_eV_per_ELECTRON * gain)
 
     shm = shared_memory.SharedMemory(OSTRICH_ONLINE_SHM_NAME)
     framebuffer = np.ndarray(shared_buffer_shape, dtype, buffer=shm.buf)
@@ -104,7 +105,6 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
 
     xsize = detector.geometry.width
     ysize = detector.geometry.height
-    gains = [panel.gain for panel in detector.geometry.panels]
     npanels = len(detector.geometry.panels)
     dtype = np.float32
 
