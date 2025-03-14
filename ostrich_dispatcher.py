@@ -26,7 +26,7 @@ import wx
 import wx.grid
 import wx.lib.newevent
 
-VERSION = "250304"
+VERSION = "250314"
 NPROC = 16
 SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-23-0/dials_env.sh"
 OSTRICH_PATH = "~sacla_sfx_app/packages/ostrich"
@@ -362,39 +362,41 @@ class MainWindow(wx.Frame):
         event.Skip()
 
     def OnGridRightClick(self, event):
-        row = event.GetRow()
-        runname = self.table.GetCellValue(row, self.COL_RUNID)
+        rows = self.table.GetSelectedRows()
+        runnames = [self.table.GetCellValue(row, self.COL_RUNID) for row in rows]
         
-        point = event.GetPosition()
         popupmenu = wx.Menu()
-        popupmenu.Append(MainWindow.MENU_KILLJOB, "Kill this job")
-        popupmenu.Append(MainWindow.MENU_HDFSEE, "View hits in hdfsee")
-        popupmenu.Append(MainWindow.MENU_DIALSVIEWER, "View hits in DIALS")
+        if len(runnames) == 1:
+            popupmenu.Append(MainWindow.MENU_KILLJOB, "Kill this job")
+            popupmenu.Append(MainWindow.MENU_HDFSEE, "View hits in hdfsee")
+            popupmenu.Append(MainWindow.MENU_DIALSVIEWER, "View hits in DIALS")
         popupmenu.Append(MainWindow.MENU_CELLEXPLORER, "Check cell")
         popupmenu.Append(MainWindow.MENU_COUNTSUMS, "Count sums")
         # TODO: disable "Check cell" while running
-        self.table.Bind(wx.EVT_MENU, lambda event: self.OnPopupmenuSelected(event, runname))
+        self.table.Bind(wx.EVT_MENU, lambda event: self.OnPopupmenuSelected(event, runnames))
+
+        point = event.GetPosition()
         self.table.PopupMenu(popupmenu, point)
 
-    def OnPopupmenuSelected(self, event, runname):
+    def OnPopupmenuSelected(self, event, runnames):
         id = event.GetId()
     
         if id == MainWindow.MENU_KILLJOB:
-            self.KillJob(runname)
+            self.KillJob(runnames)
         elif id == MainWindow.MENU_HDFSEE:
-            self.HDFsee(runname)
+            self.HDFsee(runnames)
         elif id == MainWindow.MENU_DIALSVIEWER:
-            self.DIALSviewer(runname)
+            self.DIALSviewer(runnames)
         elif id == MainWindow.MENU_CELLEXPLORER:
-            self.CellExplorer(runname)
+            self.CellExplorer(runnames)
         elif id == MainWindow.MENU_COUNTSUMS:
 #            GetSelectionBlock no longer works on newer wxPython as before...
 #             https://forums.wxwidgets.org/viewtopic.php?t=41607
 #            row1 = self.table.GetSelectionBlockTopLeft()[0][0]
 #            row2 = self.table.GetSelectionBlockBottomRight()[0][0]
-            self.CountSums(self.table.GetSelectedRows())
+            self.CountSums()
 
-    def CountSums(self, rows):
+    def CountSums(self):
         total = {}
         processed = {}
         accepted = {}
@@ -404,8 +406,10 @@ class MainWindow(wx.Frame):
         for t in types:
             for x in (total, processed, accepted, hits, indexed):
                 x[t] = 0
+        # FIXME: this is not clean: tight coupling with the UI objects
+        rows = self.table.GetSelectedRows()
         for row in rows:
-            text = self.table.GetCellValue(row, 0)
+            text = self.table.GetCellValue(row, self.COL_RUNID)
             typ = "normal"
             for t in types:
                 if text.endswith(t):
@@ -433,8 +437,10 @@ class MainWindow(wx.Frame):
         dlg.ShowModal()
         dlg.Destroy()
 
-    def HDFsee(self, runname):
-        # TODO: warn when multiple rows are selected
+    def HDFsee(self, runnames):
+        assert len(runnames) == 1
+        runname = runnames[0]
+
         # TODO: use bin 2 for MPCCD, bin 4 for CITIUS
         geometry = runname[:runname.find("-")] + ".geom"
         if not os.path.exists(runname + "/" + geometry): # backward compatibility with old Cheetah pipeline
@@ -449,8 +455,9 @@ class MainWindow(wx.Frame):
 
         threading.Thread(target=launchHDFsee).start()
 
-    def DIALSviewer(self, runname):
-        # TODO: warn when multiple rows are selected
+    def DIALSviewer(self, runnames):
+        assert len(runnames) == 1
+        runname = runnames[0]
 
         def launchDIALSviewer():
             command = "dials.image_viewer {runname}/run{runname}.h5 &".format(runname=runname)
@@ -458,18 +465,29 @@ class MainWindow(wx.Frame):
 
         threading.Thread(target=launchDIALSviewer).start()
 
-    def CellExplorer(self, runname):
-        # TODO: warn when multiple rows are selected
+    def CellExplorer(self, runnames):
+        streams = ""
+        missing = ""
+        for runname in runnames:
+            stream = "%s/%s.stream" % (runname, runname)
+            if os.path.exists(stream):
+                streams += stream + " "
+            else:
+                missing += stream + "\n"
+
         def launchCellExplorer():
-            command = "cd {runname}; cell_explorer {runname}.stream &".format(runname=runname)
+            command = "cat {streams} | cell_explorer - &".format(streams=streams)
             os.system(command)
             
-        if os.path.exists("%s/%s.stream" % (runname, runname)):
+        if missing != "":
+            self.showError("Indexing results for some runs are not available (yet):\n" + missing)
+        if streams != "":
             t = threading.Thread(target=launchCellExplorer).start()
-        else:
-            self.showError("Indexing result for {runname} is not available (yet).".format(runid=runname))
 
-    def KillJob(self, runid):
+    def KillJob(self, runnames):
+        assert len(runnames) == 1
+        runid = runnames[0]
+
         message = "Are you sure to kill job %s?" % runid
         dlg = wx.MessageDialog(None, message, "Ostrich dispatcher", wx.YES_NO | wx.NO_DEFAULT)
         ret = dlg.ShowModal()
