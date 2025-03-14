@@ -32,7 +32,7 @@ def run(params):
 
     # Get Run info
     runid = dbpy.read_runnumber_newest(bl)
-    #runid = 216241 # debug using simulator
+    runid = 216241 # debug using simulator
     if photon_energy == libtbx.Auto:
         comment = dbpy.read_comment(bl, runid)
         photon_energy = 1000.0 * dbpy.read_config_photonenergy(bl, runid)

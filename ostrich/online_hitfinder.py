@@ -16,7 +16,7 @@ from scitbx import matrix
 from ostrich import OSTRICH_ONLINE_SHM_NAME
 from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image, SI_eV_per_ELECTRON
 
-FRAME_NS = int(1E9 / 30.0) # 30 FPS
+FRAME_STEP = 2 # 30 FPS
 
 def image_reading_worker(worker_id, start_frame, read_queue, hitfinding_queue, detector, shared_buffer_shape, dtype, params):
     nproc_reader = params.nproc_reader
@@ -38,20 +38,30 @@ def image_reading_worker(worker_id, start_frame, read_queue, hitfinding_queue, d
         slot = task
 
         while True:
-            next_frame = start_frame + int(FRAME_NS * (- 0.1 + (1 + np.round(frame_idx)) * nproc_reader))
-            info = detector.ctrl_buffer.collect_data(framebuffer[slot, :, :, :,], detector.det_ids, next_frame)
-            cur_frame = info['data_time']
-            delta_prev = (cur_frame - prev_frame) / FRAME_NS
-            delta_req = (cur_frame - next_frame) / FRAME_NS
-            prev_frame = cur_frame
-            frame_idx = ((cur_frame - start_frame) / (FRAME_NS * nproc_reader))
-            print("Reader %d retrieved frame %d (req %d) to slot %d, delta prev = %f, delta req = %f, frame idx = %f, %d" %
-                      (worker_id, cur_frame, next_frame, slot, delta_prev, delta_req, frame_idx, np.round(frame_idx)))
-            if delta_req > 0.3:
-                frame_idx = np.round(frame_idx) + int(16 / nproc_reader)
-                print("Reader %d is too slow! fast forwarding frame idx to %f" % (worker_id, frame_idx))
-            else:
-                break
+            next_frame = start_frame + FRAME_STEP * (1 + frame_idx) * nproc_reader
+            try:
+                info = detector.ctrl_buffer.collect_data(framebuffer[slot, :, :, :,], detector.det_ids, next_frame)
+            except ctolpy_xfel.APIError as ex:
+                if ex.args[0] == ctolpy_xfel.CTOL_ERR_GETDATA_CMD_RESULT_TIMEOUT:
+                    print("Reader %d requested ctag %d too early" % (worker_id, new_frame))
+                    continue
+                elif ex.args[0] == ctolpy_xfel.CTOL_ERR_CTAGDATAGONE:
+                    info = detector.ctrl_buffer.collect_data(framebuffer[slot, :, :, :,], detector.det_ids, ctolpy_xfel.NEWEST)
+                    cur_frame = info['ctag']
+                    new_frame_idx = (cur_frame - start_frame) // (FRAME_STEP * nproc_reader)
+                    print("Reader %d is too slow! fast forwarding frame idx from %d to %d" % (worker_id, frame_idx + 1, new_frame_idx))
+                    frame_idx = new_frame_idx
+                    continue
+                else:
+                    raise e
+ 
+            cur_frame = info['ctag']
+            new_frame_idx = (cur_frame - start_frame) // (FRAME_STEP * nproc_reader)
+            print("Reader %d retrieved frame %d (req %d) to slot %d, frame idx = %d, delta idx = %d" %
+                      (worker_id, cur_frame, next_frame, slot, new_frame_idx, new_frame_idx - frame_idx))
+            frame_idx = new_frame_idx
+            break
+        
         hitfinding_queue.put((slot, cur_frame))
 
 def hitfinding_worker(worker_id, hitfind_queue, result_queue, detector, shared_buffer_shape, dtype, pixel_mask,
@@ -78,7 +88,7 @@ def hitfinding_worker(worker_id, hitfind_queue, result_queue, detector, shared_b
             break
         slot, cur_frame = task
 
-        #import time; time.sleep(0.1)
+        #import time; time.sleep(0.2)
         print("Hitfinder %d received frame %d at slot %d" % (worker_id, cur_frame, slot))
 
         image = FormatSACLAInMemory(framebuffer[slot, :, :, :], detector.geometry, photon_energy, adu_per_photon, distance=clen)
@@ -91,7 +101,8 @@ def hitfinding_worker(worker_id, hitfind_queue, result_queue, detector, shared_b
         experiments = ExperimentListFactory.from_imageset_and_crystal(imageset, None)
 
         if False: # skip spot-finding
-            print(tag)
+            #print(cur_frame)
+            result_queue.put((slot, cur_frame, 0))
             continue
 
         observed = flex.reflection_table.from_observations(experiments, params, is_stills=True)
@@ -118,10 +129,10 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
     for i in range(framebuffer_size):
         read_queue.put(i)
 
-    # Get the start time
+    # Get the start ctag
     info = detector.ctrl_buffer.collect_data(shared_buffer[0, :, :, :,], detector.det_ids, ctolpy_xfel.NEWEST)
-    cur_frame = info['data_time']
-    print("Base time %d" % cur_frame)
+    cur_frame = info['ctag']
+    print("Base ctag %d" % cur_frame)
 
     logfile = open("spotcount-from-%d.log" % cur_frame, "a")
 
@@ -136,11 +147,11 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
 
     # Create reader workers
     for i in range(nproc_reader):
-        start_frame = cur_frame + FRAME_NS * i
+        start_frame = cur_frame + FRAME_STEP * i
         p = Process(target=image_reading_worker, args=(i, start_frame, read_queue, hitfind_queue, \
                     detector, shared_buffer.shape, dtype, params))
         p.start()
-        print("Image reading worker process %d started with base time %d." % (i, start_frame))
+        print("Image reading worker process %d started with base ctag %d." % (i, start_frame))
         image_read_workers.append(p)
 
     n_finished = 0
