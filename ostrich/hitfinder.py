@@ -17,7 +17,7 @@ from scitbx import matrix
 from ostrich import update_status
 from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image, SI_eV_per_ELECTRON
 
-def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dark_average, pixel_mask, params):
+def queue_based_worker(read_queue, result_queue, chunksize, detector, output_dtype, dark_average, pixel_mask, params):
     from dials.array_family import flex
     from ostrich.inmemory_dxtbx import FormatSACLAInMemory
 
@@ -70,7 +70,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
             # SI_eV_per_ELECTRON (~ 3.65) is the energy required to make an electron-hole pair in silicon.
             # SACLA's gain (G) is the number of electron-hole pair per ADU, while DIALS's gain is photon/ADU.
 
-            image_buf = [buf.read_det_data(0) * (gain * SI_eV_per_ELECTRON * adu_per_photon / pulse_energy) - dark \
+            image_buf = [buf.read_det_data(0) * (gain * SI_eV_per_ELECTRON / pulse_energy) - dark \
                          for gain, buf, dark in zip(gains, detector.buffers, dark_average)]
         else:
             image_buf = [None] * len(detector.geometry.panels)
@@ -80,15 +80,15 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
                     continue
 
                 detector.buffers.read_image(citius_raw_buf[i], panel.index, tag)
-                citius_raw_buf[i] *= gains[i] * SI_eV_per_ELECTRON * adu_per_photon / pulse_energy
+                citius_raw_buf[i] *= gains[i] * SI_eV_per_ELECTRON / pulse_energy
                 image_buf[i] = citius_raw_buf[i]
 
         if False: # skip DIALS
             print(tag)
             continue
 
-        # Images are NOT binned yet!
-        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, adu_per_photon, distance=params.clen)
+        # Images are NOT binned yet! Images are at adu_per_photon = 1.0.
+        image = FormatSACLAInMemory(image_buf, detector.geometry, pulse_energy, 1.0, distance=params.clen)
         imageset = ImageSet(ImageSetData(MemReader([image,]), None))
         imageset.set_beam(image.get_beam())
         imageset.set_detector(image.get_detector())
@@ -112,7 +112,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
             if not is_citius or in_hitfinding_roi[i]:
                 continue
             detector.buffers.read_image(citius_raw_buf[i], panel.index, tag)
-            citius_raw_buf[i] *= gains[i] * SI_eV_per_ELECTRON * adu_per_photon / pulse_energy
+            citius_raw_buf[i] *= gains[i] * SI_eV_per_ELECTRON / pulse_energy
             image_buf[i] = citius_raw_buf[i]
 
         if binning != 1:
@@ -122,8 +122,12 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
         chunkidx = 0
         compressed_chunks = [None] * (cp * cy * cx)
         for ip in range(cp):
-            image_buf[ip].clip(np.iinfo(dtype).min, np.iinfo(dtype).max, out=image_buf[ip])
-            rounded_buf = np.rint(image_buf[ip]).astype(dtype)
+            image_buf[ip] *= adu_per_photon
+            if output_dtype.kind == "f":
+                rounded_buf = image_buf[ip].astype(output_dtype)
+            else:
+                image_buf[ip].clip(np.iinfo(output_dtype).min, np.iinfo(output_dtype).max, out=image_buf[ip])
+                rounded_buf = np.rint(image_buf[ip]).astype(output_dtype)
             byteview = rounded_buf.view(dtype=np.uint8) # ONLY the length of the fast axis changes
             itemsize = rounded_buf.dtype.itemsize # dtype.itemsize (e.g. np.int32.itemsize) doesn't work
 
@@ -141,7 +145,7 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, dtype, dar
 
         result_queue.put([tag, len(xyzobs), pulse_energy, compressed_chunks])
 
-def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pixel_mask, params):
+def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pixel_mask, output_dtype, params):
     nproc = params.nproc
     hit_threshold = params.hit_threshold
     adu_per_photon = params.adu_per_photon
@@ -157,11 +161,6 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     ysize = detector.geometry.height // binning
     gains = [panel.gain for panel in detector.geometry.panels]
     npanels = len(detector.geometry.panels)
-
-    if is_citius:
-        dtype = np.int32
-    else:
-        dtype = np.uint16
 
     if isinstance(detector, MPCCDDetector):
         chunksize = (256, 256) # slow, fast
@@ -194,7 +193,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
         # arrays became slower (https://github.com/dials/dials/issues/2708).
         # NumPy array backed by multiprocessing.shared_memory is much much faster.
         p = Process(target=queue_based_worker, args=(read_queue, result_queue, \
-                    chunksize, detector, dtype, dark_average, pixel_mask, params))
+                    chunksize, detector, output_dtype, dark_average, pixel_mask, params))
         p.start()
         print("Worker process", i, "started.")
         workers.append(p)
@@ -206,7 +205,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
 
     if use_nexus:
         data_group = h5out["/entry/data"]
-        d = data_group.create_dataset("data", shape=(0, 0, 0), dtype=dtype, \
+        d = data_group.create_dataset("data", shape=(0, 0, 0), dtype=output_dtype, \
                                       maxshape=(None, ysize * npanels, xsize), chunks=(1, chunksize[0], chunksize[1]), \
                                       compression="gzip", shuffle=True)
     #         compression=hdf5plugin.Blosc2(cname='blosclz', clevel=9, filters=hdf5plugin.Blosc2.BITSHUFFLE))

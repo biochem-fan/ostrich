@@ -8,7 +8,7 @@ from ostrich.detector import SI_eV_per_ELECTRON
 
 import stpy
 
-def add_image_par(read_queue, result_queue, detector, adu_per_photon):
+def add_image_par(read_queue, result_queue, detector):
     detector.allocate_readers()
 
     xsize = detector.geometry.width
@@ -30,7 +30,7 @@ def add_image_par(read_queue, result_queue, detector, adu_per_photon):
                 for i in range(npanels):
                     detector.readers[i].collect(detector.buffers[i], tag)
                     data = detector.buffers[i].read_det_data(0)
-                    data *= gains[i] * SI_eV_per_ELECTRON * adu_per_photon / energy
+                    data *= gains[i] * SI_eV_per_ELECTRON / energy
                     local_buffer[(ysize * i):(ysize * (i + 1)),] += data
             except Exception as e:
                 print(e)
@@ -38,7 +38,7 @@ def add_image_par(read_queue, result_queue, detector, adu_per_photon):
             local_n_added += 1
             result_queue.put(("ONE_IMAGE", ))
 
-def average_images(detector, tags, photon_energies, adu_per_photon, status, nproc=8):
+def average_images(detector, tags, photon_energies, status, nproc=8):
     xsize = detector.geometry.width
     ysize = detector.geometry.height
     npanels = len(detector.geometry.panels)
@@ -57,7 +57,7 @@ def average_images(detector, tags, photon_energies, adu_per_photon, status, npro
                     raise RuntimeError("FailedOn_collect_data")
 
                 data = detector.buffers[i].read_det_data(0)
-                data *= gains[i] * 3.65 * adu_per_photon / energy
+                data *= gains[i] * SI_eV_per_ELECTRON / energy
                 sum_buffer[(ysize * i):(ysize * (i + 1)),] += data
 
             return 1
@@ -73,7 +73,7 @@ def average_images(detector, tags, photon_energies, adu_per_photon, status, npro
         workers = []
         detector.deallocate_readers()
         for i in range(nproc):
-            p = Process(target=add_image_par, args=(read_queue, result_queue, detector, adu_per_photon))
+            p = Process(target=add_image_par, args=(read_queue, result_queue, detector))
             p.start()
             workers.append(p)
 
@@ -108,10 +108,7 @@ def average_images(detector, tags, photon_energies, adu_per_photon, status, npro
     # In the Phase 3 detector, some pixels average to negative values.
     # Most are around -0.1 and all those below -1 are at panel edges that will be masked.
     # So we don't have to worry about them.
-    ushort_max = np.iinfo(np.uint16).max
-    print("\nCalibration image statistics: averaged %d images, #neg (< 0) %d, #overflow (> %d) %d" %
-            (n_added, np.sum(sum_buffer < 0), ushort_max, np.sum(sum_buffer > ushort_max)))
-    sum_buffer.clip(0, ushort_max, out=sum_buffer)
-    averaged = sum_buffer.astype(np.uint16)
+    print("\nCalibration image statistics: averaged %d images, #neg (< 0) %d" %
+            (n_added, np.sum(sum_buffer < 0)))
 
-    return averaged
+    return sum_buffer

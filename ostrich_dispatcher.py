@@ -64,6 +64,7 @@ TIME_OSTRICH=`date +%s`
 # --xgandalf-sampling-pitch=2 --xgandalf-grad-desc-iterations=3 is equivalent to --xgandalf-fast-execution
 # but setting in this way allows one to "disable" it in crystfel.args by overriding by the default
 # --xgandalf-sampling-pitch=6 --xgandalf-grad-desc-iterations=4.
+# NOTE: --threshold depends on adu_per_photon
 {crystfel_path}/indexamajig -g {runid}.geom -o {runname}.stream -j {nproc} -i - \\
    --indexing=xgandalf --xgandalf-sampling-pitch=2 --xgandalf-grad-desc-iterations=3 \\
    --peaks=peakfinder8 --threshold=100 --min-snr=5 --min-pix-count=2 --local-bg-radius=3 --int-radius=3,4,7 \\

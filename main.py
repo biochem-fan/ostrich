@@ -147,6 +147,13 @@ def run(params):
             params.adu_per_photon = 10
     adu_per_photon = params.adu_per_photon
 
+    if params.output_dtype == libtbx.Auto:
+        if is_citius:
+            params.output_dtype = "int32"
+        else:
+            params.output_dtype = "uint16"
+    output_dtype = np.dtype(getattr(np, params.output_dtype))
+
     # Find images for dark average
     try:
         exposed = is_exposed(high_tag, tags, bl, runid)
@@ -213,7 +220,7 @@ def run(params):
     if not is_citius:
         print("Calculating a dark average over %d images:\n" % len(calib_images))
         photon_energies_calib = pulse_energies[np.logical_not(exposed)]
-        dark_average = average_images(detector, calib_images, photon_energies_calib, adu_per_photon, status, nproc)
+        dark_average = average_images(detector, calib_images, photon_energies_calib, status, nproc)
 
         if False:
             f = h5py.File("%d-dark.h5" % runid, "w")
@@ -245,7 +252,7 @@ def run(params):
 
     photon_energies_target = pulse_energies[exposed][right_type]
     # TODO: Allow non-zero beam center. This is necessary for radial profiles on detector shifted experiments
-    find_hits(detector, target_images, photon_energies_target, output_filename, dark_average, pixel_mask, params)
+    find_hits(detector, target_images, photon_energies_target, output_filename, dark_average, pixel_mask, output_dtype, params)
 
 phil_str = '''
 bl = 2
@@ -311,6 +318,12 @@ compression_level = 6
 adu_per_photon = Auto
  .help = Output value per photon. Auto means 10 for MPCCD, 4 for CITIUS.
  .type = float(value_min=0.1, value_max = 100)
+
+output_dtype = Auto
+ .help = Output data type. Values beyond the valid range are truncated. \\
+         For floats, adu_per_photon will be set to 1. \\
+         Auto means uint16 for MPCCD, int32 for CITIUS.
+ .type = str
 
 citius_roi = *all 24 40 48
  .help = ROI for CITIUS detectors
@@ -379,6 +392,10 @@ if __name__ == "__main__":
         print("Option: adu_per_photon    = Auto (10 for MPCCD, 4 for CITIUS)")
     else:
         print("Option: adu_per_photon    = %.1f / photon" % params.adu_per_photon)
+    if params.output_dtype == libtbx.Auto:
+        print("Option: output_dtype      = Auto (uint16 for MPCCD, int32 for CITIUS)")
+    else:
+        print("Option: output_dtype      = %s" % params.output_dtype)
     print("Option: citius_roi        = %s" % params.citius_roi)
     print("Option: hitfinding_roi    = %s" % params.hitfinding_roi)
     print("Option: binning           = %d" % params.binning)
