@@ -104,7 +104,7 @@ class PlotWindow(wx.Frame):
         order = framenumber.argsort()
         peaks = peaks[order]
         framenumber = framenumber[order]
-        frametime = [(x - framenumber[-1]) * 1E-9 for x in framenumber]
+        frametime = [(x - framenumber[-1]) * (1.0 / 60) for x in framenumber] # ctag is at 60 Hz
 
         self.ax.set_ylim([0, np.max(peaks)])
         self.ax.set_xlim([frametime[0], frametime[-1]])
@@ -151,7 +151,7 @@ class PlotWindow(wx.Frame):
                     break
 
 print()
-print("Cheetah Online plotter version 2025/02/04")
+print("Cheetah Online plotter version 2025/03/17")
 print("   by Takanori Nakane")
 print()
 
