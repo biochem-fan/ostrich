@@ -28,11 +28,11 @@ def run(params):
     bl = params.bl
     clen = params.clen
     framebuffer_size = params.framebuffer_size
-    citius_roi = params.citius_roi
+    citius_roi = params.hitfinding_roi
 
     # Get Run info
     runid = dbpy.read_runnumber_newest(bl)
-    runid = 216241 # debug using simulator
+    #runid = 216241 # debug using simulator
     if photon_energy == libtbx.Auto:
         comment = dbpy.read_comment(bl, runid)
         photon_energy = 1000.0 * dbpy.read_config_photonenergy(bl, runid)
@@ -76,7 +76,7 @@ def run(params):
     # Note that this beam center affects only the test geometry files, NOT hit finding.
     # Take care when using the radial profile and/or resolution filters.
     # This test data is from Run 216157 tag 628776479 - 628776581.
-    if True:
+    if False:
         beam_center = (165.6, 206.9) # x, y in mm, NeXus-McStats system
         for panel in detector.geometry.panels:
             panel.gain = 1.0
@@ -110,24 +110,20 @@ photon_energy = Auto
  .help = Photon energy in eV. Leave this Auto to retrieve from the latest run.
  .type = float(value_min = 1000, value_max = 20000)
 
-framebuffer_size = 10
+framebuffer_size = 100
  .help = Number of frames in the buffer
- .type = int(value_min = 1, value_max = 100)
+ .type = int(value_min = 1, value_max = 200)
 
-nproc_hitfinder = 8
+nproc_hitfinder = 24
  .help = Number of hitfinder processes
- .type = int(value_min = 1, value_max = 48)
+ .type = int(value_min = 1, value_max = 24)
 
-nproc_reader = 1
+nproc_reader = 3
  .help = Number of image retriever processes
- .type = int(value_min = 1, value_max = 3)
-
-citius_roi = *all 24 40 48
- .help = ROI for CITIUS detectors
- .type = choice
+ .type = int(value_min = 1, value_max = 4)
 
 hitfinding_roi = *all 24 40 48
- .help = ROI used for hit finding (only for CITIUS detectors)
+ .help = ROI for CITIUS detectors
  .type = choice
 
 output {
@@ -172,7 +168,6 @@ if __name__ == "__main__":
     print("Option: framebuffer_size  = %d" % params.framebuffer_size)
     print("Option: nproc_hihtfinder  = %d" % params.nproc_hitfinder)
     print("Option: nproc_reader      = %d" % params.nproc_reader)
-    print("Option: citius_roi        = %s" % params.citius_roi)
     print("Option: hitfinding_roi    = %s" % params.hitfinding_roi)
     print()
 

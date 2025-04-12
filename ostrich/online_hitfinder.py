@@ -12,6 +12,7 @@ from dxtbx.format.image import ImageBool
 from dxtbx.imageset import ImageSet, ImageSetData, MemReader
 from dxtbx.model.experiment_list import ExperimentListFactory
 from scitbx import matrix
+import time
 
 from ostrich import OSTRICH_ONLINE_SHM_NAME
 from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image, SI_eV_per_ELECTRON
@@ -43,13 +44,14 @@ def image_reading_worker(worker_id, start_frame, read_queue, hitfinding_queue, d
                 info = detector.ctrl_buffer.collect_data(framebuffer[slot, :, :, :,], detector.det_ids, next_frame)
             except ctolpy_xfel.APIError as ex:
                 if ex.args[0] == ctolpy_xfel.CTOL_ERR_GETDATA_CMD_RESULT_TIMEOUT:
-                    print("Reader %d requested ctag %d too early" % (worker_id, new_frame))
+                    print("%f: Reader %d requested ctag %d too early" % (time.time(), worker_id, new_frame))
                     continue
                 elif ex.args[0] == ctolpy_xfel.CTOL_ERR_CTAGDATAGONE:
                     info = detector.ctrl_buffer.collect_data(framebuffer[slot, :, :, :,], detector.det_ids, ctolpy_xfel.NEWEST)
                     cur_frame = info['ctag']
                     new_frame_idx = (cur_frame - start_frame) // (FRAME_STEP * nproc_reader)
-                    print("Reader %d is too slow! fast forwarding frame idx from %d to %d" % (worker_id, frame_idx + 1, new_frame_idx))
+                    print("%f: Reader %d is too slow for tag %d! The current head is %d. fast forwarding frame idx from %d to %d" %
+                              (time.time(), worker_id, next_frame, cur_frame, frame_idx + 1, new_frame_idx))
                     frame_idx = new_frame_idx
                     continue
                 else:
@@ -57,8 +59,8 @@ def image_reading_worker(worker_id, start_frame, read_queue, hitfinding_queue, d
  
             cur_frame = info['ctag']
             new_frame_idx = (cur_frame - start_frame) // (FRAME_STEP * nproc_reader)
-            print("Reader %d retrieved frame %d (req %d) to slot %d, frame idx = %d, delta idx = %d" %
-                      (worker_id, cur_frame, next_frame, slot, new_frame_idx, new_frame_idx - frame_idx))
+            print("%f: Reader %d retrieved frame %d (req %d) to slot %d, frame idx = %d, delta idx = %d" %
+                      (time.time(), worker_id, cur_frame, next_frame, slot, new_frame_idx, new_frame_idx - frame_idx))
             frame_idx = new_frame_idx
             break
         
@@ -88,8 +90,7 @@ def hitfinding_worker(worker_id, hitfind_queue, result_queue, detector, shared_b
             break
         slot, cur_frame = task
 
-        #import time; time.sleep(0.2)
-        print("Hitfinder %d received frame %d at slot %d" % (worker_id, cur_frame, slot))
+        print("%f: Hitfinder %d received frame %d at slot %d" % (time.time(), worker_id, cur_frame, slot))
 
         image = FormatSACLAInMemory(framebuffer[slot, :, :, :], detector.geometry, photon_energy, adu_per_photon, distance=clen)
         imageset = ImageSet(ImageSetData(MemReader([image, ]), None))
@@ -107,6 +108,7 @@ def hitfinding_worker(worker_id, hitfind_queue, result_queue, detector, shared_b
 
         observed = flex.reflection_table.from_observations(experiments, params, is_stills=True)
         xyzobs = observed['xyzobs.px.value']
+        print("%f: Hitfinder %d found %d spots on frame %d at slot %d" % (time.time(), worker_id, len(xyzobs), cur_frame, slot))
         result_queue.put((slot, cur_frame, len(xyzobs)))
 
 def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
@@ -166,7 +168,7 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
         slot, cur_frame, n_spots = task
         n_processed += 1
 
-        print("%4d processed, current tag = %d with %d spot(s)" % (n_processed, cur_frame, n_spots))
+        print("%f: %4d processed, current tag = %d with %d spot(s)" % (time.time(), n_processed, cur_frame, n_spots))
         logfile.write("%d %d\n" % (cur_frame, n_spots))
         if (n_processed % 30 == 0):
             logfile.flush()

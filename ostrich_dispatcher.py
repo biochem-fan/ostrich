@@ -872,7 +872,7 @@ print("Option: pd3_thresh       = %f" % opts.pd3_thresh)
 print("Option: submit_dark_to   = %s" % opts.submit_dark_to)
 print("Option: submit_dark_any  = %s" % opts.submit_dark_any)
 print("Option: crystfel_args    = %s" % opts.crystfel_args)
-print("Option: ostrich_args    = %s" % opts.ostrich_args)
+print("Option: ostrich_args     = %s" % opts.ostrich_args)
 
 if opts.submit > 0: # headless
     mw = MainWindow(None, opts, True)
