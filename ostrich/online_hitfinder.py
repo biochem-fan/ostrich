@@ -91,8 +91,8 @@ def hitfinding_worker(worker_id, hitfind_queue, result_queue, detector, shared_b
         slot, cur_frame = task
 
         print("%f: Hitfinder %d received frame %d at slot %d" % (time.time(), worker_id, cur_frame, slot))
-
-        image = FormatSACLAInMemory(framebuffer[slot, :, :, :], detector.geometry, photon_energy, adu_per_photon, distance=clen)
+        framebuffer[slot, :, :, :] /= adu_per_photon # normalize to gain = 1.0
+        image = FormatSACLAInMemory(framebuffer[slot, :, :, :], detector.geometry, photon_energy, 1.0, distance=clen)
         imageset = ImageSet(ImageSetData(MemReader([image, ]), None))
         imageset.set_beam(image.get_beam())
         imageset.set_detector(image.get_detector())
