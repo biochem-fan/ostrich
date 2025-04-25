@@ -40,7 +40,7 @@ from ostrich import VERSION
 #  Rotation is anti-clockwise.
 #  Thus, Z and X must be flipped for NeXus; X and Y for CBF/DIALS/dxtbx.
 
-def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, clen, runid, beam_center, binning=1):
+def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, clen, bl, runid, beam_center, binning=1):
     assert geometry.width % binning == 0
     assert geometry.height % binning == 0
 
@@ -169,7 +169,7 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
             out.write("baddamage2/max_ss = 3071\n")
             out.write("baddamage2/panel  = q3\n\n")
 
-            if runid >= 73832:
+            if runid >= 73832 and bl == 2:
                 out.write("; 2019B: broken ports in Panel 2,3,6,7\n")
                 out.write("badport2/min_fs = 448\n")
                 out.write("badport2/max_fs = 511\n")
@@ -195,6 +195,17 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
                 out.write("badport7/max_ss = 7167\n")
                 out.write("badport7/panel  = q7\n\n")
 
+        elif re.match("MPCCD-8B0-2-008", geometry.panels[0].long_name):
+            assert binning == 1
+
+            if runid >= 223598 and bl == 2:
+                out.write("; Damaged port 1\n")
+                out.write("badq3port1/min_fs = 0\n")
+                out.write("badq3port1/max_fs = 63\n")
+                out.write("badq3port1/min_ss = 2048\n")
+                out.write("badq3port1/max_ss = 3071\n")
+                out.write("badq3port1/panel  = q3\n\n")
+
 # Returns (border, outer_border)
 # outer_border is along the fast edge at the largest slow values
 def get_border(det_name):
@@ -219,7 +230,7 @@ def get_border(det_name):
         return (5, 30) # default assumes New Phase 3 detector
 
 # This returns a non-binned mask, because it is used for in-memory hitfinding.
-def make_pixelmask(geometry, runid, binning=1):
+def make_pixelmask(geometry, bl, runid, binning=1):
     assert geometry.width % binning == 0
     assert geometry.height % binning == 0
 
@@ -251,11 +262,17 @@ def make_pixelmask(geometry, runid, binning=1):
         mask[1024:2048, 501:512] = NOISY
         mask[2048:3072, 0:11] = NOISY
 
-        if runid >= 73832:
+        if runid >= 73832 and bl == 2:
             mask[1024:2048, 448:512] = NOISY
             mask[2048:3072, 0:64] = NOISY
             mask[5120:6144, 0:64] = NOISY
             mask[6144:7168, 448:512] = NOISY
+
+    elif re.match("MPCCD-8B0-2-008", geometry.panels[0].long_name):
+        assert binning == 1
+
+        if runid >= 223598 and bl == 2:
+            mask[2048:3072, 0:64] = NOISY
 
     return mask
 

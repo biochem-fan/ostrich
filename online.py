@@ -83,13 +83,13 @@ def run(params):
 
     adu_per_photon = 10 # dummy value for geometry output (debug use only)
     # Write metadata
-    pixel_mask = make_pixelmask(detector.geometry, runid)
-    binned_pixel_mask = make_pixelmask(detector.geometry, runid, binning)
+    pixel_mask = make_pixelmask(detector.geometry, bl, runid)
+    binned_pixel_mask = make_pixelmask(detector.geometry, bl, runid, binning)
 
     output_filename = "online-debug.h5"
     # TODO: binning is set to 1 because detector.geometry is already binned! This is irrelevant for NeXuS
-    # write_crystfel_geom("online.geom", True, detector.geometry, photon_energy, adu_per_photon, clen, runid, beam_center, 1)
-    #write_nexus(output_filename, detector.geometry, bl, runid, "Online Debug", start_time, end_time, clen, adu_per_photon, binned_pixel_mask, beam_center, binning)
+    # write_crystfel_geom("online.geom", True, detector.geometry, photon_energy, adu_per_photon, clen, bl, runid, beam_center, 1)
+    # write_nexus(output_filename, detector.geometry, bl, runid, "Online Debug", start_time, end_time, clen, adu_per_photon, binned_pixel_mask, beam_center, binning)
     print()
 
     # Make a boolean mask for DIALS hit finder. Note that hit finder uses non-binned images.

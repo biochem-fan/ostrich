@@ -196,12 +196,12 @@ def run(params):
     else:
         beam_center = (0.0, 0,0)
 
-    write_crystfel_geom("%d.geom" % runid, use_nexus, detector.geometry, mean_energy, adu_per_photon, clen, runid, beam_center, binning)
+    write_crystfel_geom("%d.geom" % runid, use_nexus, detector.geometry, mean_energy, adu_per_photon, clen, bl, runid, beam_center, binning)
 
     # Write metadata
-    pixel_mask = make_pixelmask(detector.geometry, runid)
+    pixel_mask = make_pixelmask(detector.geometry, bl, runid)
     if binning != 1:
-        binned_pixel_mask = make_pixelmask(detector.geometry, runid, binning)
+        binned_pixel_mask = make_pixelmask(detector.geometry, bl, runid,binning)
     else:
         binned_pixel_mask = pixel_mask
 
