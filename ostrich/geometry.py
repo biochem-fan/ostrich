@@ -209,7 +209,9 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
 # Returns (border, outer_border)
 # outer_border is along the fast edge at the largest slow values
 def get_border(det_name):
-    if re.match("MPCCD-8B0-2-008", det_name): # New Phase 3 detector
+    if   re.match("MPCCD-8B0-2-010", det_name): # New Phase 3 detector
+        return (5, 32) # based on 25May-Umena (234606) @ 8.5keV
+    elif re.match("MPCCD-8B0-2-008", det_name): # New Phase 3 detector
         return (5, 30) # based on 24Feb-Shimada @ 10keV
     elif re.match("MPCCD-8B0-2-007", det_name): # New Phase 3 detector
         return (5, 33) # based on 22Nov-Iwata @ 10keV
