@@ -224,7 +224,10 @@ class MPCCDDetector(Detector):
         geometry.height = det_infos[0]["ysize"]
         geometry.pixel_size = det_infos[0]["mp_pixelsizex"]
 
-        geometry.thickness = 300 # um for Phase III (was 50 um for Phase I)
+        if geometry.name.startswith("MPCCD-8N"):
+            geometry.thickness = 50 # um for Phase I
+        else:
+            geometry.thickness = 300 # um for Phase III
         geometry.groups = []
 
         for i, det_info in enumerate(det_infos):
