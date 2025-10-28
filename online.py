@@ -83,7 +83,7 @@ def run(params):
 
     adu_per_photon = 10 # dummy value for geometry output (debug use only)
     # Write metadata
-    pixel_mask = make_pixelmask(detector.geometry, bl, runid)
+    pixel_mask = make_pixelmask(detector.geometry, bl, runid, binning=1)
     binned_pixel_mask = make_pixelmask(detector.geometry, bl, runid, binning)
 
     output_filename = "online-debug.h5"

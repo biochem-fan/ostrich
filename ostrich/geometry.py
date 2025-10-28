@@ -49,9 +49,59 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
     pixel_size = geometry.pixel_size * binning
     npanels = len(geometry.panels)
 
+    rigid_group_def = []
+    for panel in geometry.panels:
+        rigid_group_def.append("rigid_group_%s = %s\n" % (panel.name, panel.name))
+    rigid_group_def.append("rigid_group_collection_independent = " + \
+                     ",".join([panel.name for panel in geometry.panels]) + "\n")
+
+    for (group_name, members) in geometry.groups:
+        rigid_group_def.append("rigid_group_%s = " % group_name + ",".join([panel_name for panel_name in members]) + "\n")
+    rigid_group_def.append("rigid_group_collection_connected = " + ",".join([group_name for (group_name, _) in geometry.groups]) + "\n")
+
+    group_def = []
+    for (group_name, members) in geometry.groups:
+        group_def.append("group_%s = " % group_name + ",".join([panel_name for panel_name in members]) + "\n")
+    group_def.append("group_all = " + ",".join([group_name for (group_name, _) in geometry.groups]) + "\n")
+
     with open(filename, "w") as out:
         out.write("; CrystFEL geometry file produced by Ostrich version %d\n" % VERSION)
         out.write(";   Takanori Nakane (tnakane.protein@osaka-u.ac.jp)\n")
+        out.write(";\n")
+        out.write("; Because CrystFEL 0.12.0 does not preserve comments except at the top,\n")
+        out.write("; important information is repeated here.\n")
+        out.write(";\n")
+        out.write("; The unit of the camera length (`clen`) is m. You SHOULD optimize this!\n")
+        out.write("; The `res` is calculated as 1 m / %.4f um (after binning %d).\n" % (pixel_size, binning))
+        out.write("; The wavelength is read from the HDF file per shot and is roughly %.1f eV.\n" % energy)
+        out.write(";\n")
+        out.write("; The pixel mask is stored in the HDF file but cannot be used in old CrystFELs <= 0.90.\n")
+        out.write("; Thus, sensor border masks are defined as rectangles in this geometry file as well.\n")
+        out.write(";   A mask name `bad{SENSOR_NAME}{l/s}{1/2}` means the border mask for the sensor SENSOR_NAME,\n")
+        out.write(";   along the long axis (l) or the short axis (s). The last digit (1 or 2) specifies the side.\n")
+        out.write(";   Bad regions near outer edges of each sensor (s2) are wider due to amplifier shield shadows.\n")
+        out.write(";   The width of the shadow depends on the camera length. You might want to optimize it by\n")
+        out.write(";   tweaking `min_ss`. The ranges are 0-indexed and inclusive in CrystFEL.\n")
+        out.write("; Depending on the detector, additional masks for damaged areas are also defined.\n")
+        out.write(";\n")
+        out.write("; The correspondence between sensor names and detector IDs is as follows:\n")
+        for i, panel in enumerate(geometry.panels):
+           if i % 4 == 0:
+               out.write(";")
+           out.write(" %s=>%s" % (panel.name, panel.long_name))
+           if i % 4 == 3 or i == len(geometry.panels) - 1:
+               out.write("\n")
+        out.write(";\n")
+        out.write("; To use `geoptimiser`, you need the following definitions.\n")
+        out.write("; These lines are included below but `align_detector` removes them. The following is a backup.\n")
+        for l in rigid_group_def:
+           out.write("; " + l)
+        out.write(";\n")
+        out.write("; If you want to use `align_detector` in CrystFEL >= 0.11.1, uncomment the following section.\n")
+        out.write("; This is disabled by default for compatibility with older CrystFELs.\n")
+        for l in group_def:
+           out.write("; " + l)
+        out.write("\n")
         out.write("clen = %.4f    ; %.1f mm camera length. You SHOULD optimize this!\n" % (clen * 1E-3, clen))
         out.write("res = %.1f     ; = 1 m / %.4f micron (binning %d) \n" % (1E6 / pixel_size, pixel_size, binning))
         if use_nexus:
@@ -78,14 +128,8 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
         out.write("\n")
 
         out.write("; Group definitions for geoptimiser\n")
-        for panel in geometry.panels:
-            out.write("rigid_group_%s = %s\n" % (panel.name, panel.name))
-        out.write("rigid_group_collection_independent = " + \
-                  ",".join([panel.name for panel in geometry.panels]) + "\n")
-
-        for (group_name, members) in geometry.groups:
-            out.write("rigid_group_%s = " % group_name + ",".join([panel_name for panel_name in members]) + "\n")
-        out.write("rigid_group_collection_connected = " + ",".join([group_name for (group_name, _) in geometry.groups]) + "\n")
+        for l in rigid_group_def:
+           out.write(l)
         out.write("\n")
 
         out.write("; Panel definitions\n")
@@ -233,14 +277,21 @@ def get_border(det_name):
     else:
         return (5, 30) # default assumes New Phase 3 detector
 
-# This returns a non-binned mask, because it is used for in-memory hitfinding.
-def make_pixelmask(geometry, bl, runid, binning=1):
+# bad_mask is (npanels * height, width), 1 is bad.
+def make_pixelmask(geometry, bl, runid, bad_mask=None, binning=1):
     assert geometry.width % binning == 0
     assert geometry.height % binning == 0
 
     xsize = geometry.width // binning
     ysize = geometry.height // binning
     npanels = len(geometry.panels)
+
+    if bad_mask is not None:
+        assert bad_mask.shape[0] == npanels * geometry.height
+        assert bad_mask.shape[1] == geometry.width
+
+        if binning != 1:
+            bad_mask = bin_image(bad_mask, binning)
 
     border, outer_border = get_border(geometry.name)
     border = int(np.ceil(border / binning))
@@ -254,6 +305,9 @@ def make_pixelmask(geometry, bl, runid, binning=1):
     NOISY = 16 # bit 4
 
     mask = np.zeros((ysize * npanels, xsize), dtype=np.uint32)
+    if bad_mask is not None: # merge API-provided mask (if present)
+        mask[bad_mask > 0] = NOISY
+
     mask[:, 0:border] = NOISY
     mask[:, (xsize - border):xsize] = NOISY
 

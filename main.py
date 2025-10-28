@@ -96,6 +96,10 @@ def run(params):
         update_status(status, "Status=Error-InvalidBinning")
         raise ValueError("binning is available only for NXmx output.")
 
+    print("ctdapy_xfel version:", ctdapy_xfel.get_api_version())
+    print("dbpy version:", dbpy.get_api_version())
+    print()
+
     # Get Run info
     try:
         run_info = dbpy.read_runinfo(bl, runid)
@@ -166,6 +170,7 @@ def run(params):
     except Exception as e:
         update_status(status, "Status=Error-NoShutterStatus")
         raise e
+    # exposed = [True] * len(tags) # for debugging
     calib_images = [tag for tag, exposed in zip(tags, exposed) if not exposed]
     exposed_images = [tag for tag, exposed in zip(tags, exposed) if exposed]
     assert len(calib_images) + len(exposed_images) == len(tags)
@@ -203,13 +208,28 @@ def run(params):
 
     write_crystfel_geom("%d.geom" % runid, use_nexus, detector.geometry, mean_energy, adu_per_photon, clen, bl, runid, beam_center, binning)
 
-    # Write metadata
-    pixel_mask = make_pixelmask(detector.geometry, bl, runid)
+    # Prepare pixel mask (with bad pixel masks from API for CITIUS)
+    if is_citius:
+        ysize = detector.geometry.height
+        bad_mask = np.zeros((ysize * len(det_ids), detector.geometry.width),
+                            dtype=np.uint8)
+        try:
+            for i, det_id in enumerate(det_ids):
+                ctrl_buf.read_badpixel_mask(bad_mask[(ysize * i):(ysize * (i + 1)),:], det_id)
+            print("The number of bad pixels from API: %d" % np.sum(bad_mask))
+        except:
+            print("This is CITIUS but bad pixel masks are unavailable from API")
+            bad_mask = None
+    else:
+        bad_mask = None
+
+    pixel_mask = make_pixelmask(detector.geometry, bl, runid, bad_mask, binning=1)
     if binning != 1:
-        binned_pixel_mask = make_pixelmask(detector.geometry, bl, runid,binning)
+        binned_pixel_mask = make_pixelmask(detector.geometry, bl, runid, bad_mask, binning)
     else:
         binned_pixel_mask = pixel_mask
 
+    # Write metadata
     output_filename = "run%d-%s.h5" % (runid, params.runtype)
     if use_nexus:
         write_nexus(output_filename, detector.geometry, bl, runid, comment, start_time, end_time, clen, adu_per_photon, binned_pixel_mask, beam_center, binning)
