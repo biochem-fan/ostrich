@@ -226,7 +226,9 @@ def get_border(det_name):
         return (5, 23) # based on 17Jul-P3Lys @ 10 keV
     elif re.match("MPCCD-8N", det_name): # Compact detector with amp shields
         return (0, 22) # based on 17Jul-Kuma @ 7 keV
-    elif re.match("CITIUS 20.2M", det_name): # based on 2024-Jul-12, 180 mm
+    elif re.match("CITIUS-20.2M", det_name): # based on 2024-Jul-12, 180 mm
+        return (1, 14)
+    elif re.match("CITIUS-2.2M", det_name): 
         return (1, 14)
     else:
         return (5, 30) # default assumes New Phase 3 detector

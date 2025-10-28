@@ -69,7 +69,13 @@ class CITIUSDetector(Detector):
         self.det_longname = det_longname
         super().__init__(det_ids, bl, runid, first_tag)
 
+    @staticmethod
+    def is_20M(detector_name):
+        return detector_name.startswith("CITIUS-20.2M-")
+
+    @staticmethod
     def filter_prbs_by_roi(det_ids, roi="all"):
+        # This function assumes roi="all" for non-20.2M detectors
         if roi == "all" or roi == "72":
             return det_ids
         elif roi == "24":
@@ -118,6 +124,7 @@ class CITIUSDetector(Detector):
         if self.geometry is None:
             self.read_detinfos()
 
+    @staticmethod
     def validate_and_set_geometry(det_infos, longname="CITIUS-20.2M-#UNK"):
         geometry = DetectorGeometry()
 
@@ -146,18 +153,22 @@ class CITIUSDetector(Detector):
 
         # Analyze 2 x 4 SSS (Sensor Sub System) blocks, each containing 3x3 panels
         geometry.groups = []
-        det_ids = [p['id'] for p in det_infos]
-        for y in [0, 3, 6, 9]:
-            for x in [0, 3]:
-                prb_in_sss = []
-                for dy in range(3):
-                    for dx in range(3):
-                        prb = x + dx + (y + dy) * 6
-                        if prb in det_ids:
-                            prb_in_sss.append("prb%02d" % prb)
-
-                if len(prb_in_sss) > 0:
-                    geometry.groups.append(("sss%d%d" % (x, y), prb_in_sss))
+        if CITIUSDetector.is_20M(longname):
+            det_ids = [p['id'] for p in det_infos]
+            for y in [0, 3, 6, 9]:
+                for x in [0, 3]:
+                    prb_in_sss = []
+                    for dy in range(3):
+                        for dx in range(3):
+                            prb = x + dx + (y + dy) * 6
+                            if prb in det_ids:
+                                prb_in_sss.append("prb%02d" % prb)
+    
+                    if len(prb_in_sss) > 0:
+                        geometry.groups.append(("sss%d%d" % (x, y), prb_in_sss))
+        else: # CITIUS 2.2M does not have the SSS hierarchy
+             for panel in geometry.panels:
+                 geometry.groups.append((panel.name, [panel.name]))
 
         return geometry
 

@@ -83,6 +83,7 @@ def run(params):
     nproc = params.nproc
     status = params.status
     citius_roi = params.citius_roi
+    hitfinding_roi = params.hitfinding_roi
     binning = params.binning
     use_nexus = params.nexus
 
@@ -116,6 +117,11 @@ def run(params):
         try:
             ctrl_buf = ctdapy_xfel.CtrlBuffer(bl, runid)
             longnames = ctrl_buf.read_detidlist()
+            detector_name = longnames[0][:-4]
+            is_20M = CITIUSDetector.is_20M(detector_name)
+            if is_20M and (citius_roi != "all" or hitfinding_roi != "all"):
+                update_status(status, "Status=Error-ROINotSupportedForNon20.2MDetectors")
+                raise RuntimeError("ROI is supported only for CITIUS 20.2M")
             print("CITIUS detector available sensor full names:", longnames)
             det_ids_all = sorted(ctrl_buf.read_sensoridlist())
             print("CITIUS detector available sensor IDs:", det_ids_all)
@@ -174,7 +180,6 @@ def run(params):
 
     # Setup buffer readers
     if is_citius:
-        detector_name = longnames[0][:-4]
         detector = CITIUSDetector(det_ids, detector_name, bl, runid, exposed_images[0])
     else:
         detector = MPCCDDetector(det_ids, bl, runid, exposed_images[0])
