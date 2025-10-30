@@ -84,6 +84,8 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
         out.write(";   tweaking `min_ss`. The ranges are 0-indexed and inclusive in CrystFEL.\n")
         out.write("; Depending on the detector, additional masks for damaged areas are also defined.\n")
         out.write(";\n")
+        out.write("; To use an external mask instead, set `mask` (dataset path in an h5 file) and `mask_file` (h5 filename).\n")
+        out.write(";\n")
         out.write("; The correspondence between sensor names and detector IDs is as follows:\n")
         for i, panel in enumerate(geometry.panels):
            if i % 4 == 0:
@@ -97,10 +99,20 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
         for l in rigid_group_def:
            out.write("; " + l)
         out.write(";\n")
-        out.write("; If you want to use `align_detector` in CrystFEL >= 0.11.1, uncomment the following section.\n")
+        out.write("; If you want to use `align_detector` in CrystFEL >= 0.11.1, copy the following `group` definitions\n")
+        out.write("; to the bottom of the file and uncomment.\n")
         out.write("; This is disabled by default for compatibility with older CrystFELs.\n")
         for l in group_def:
            out.write("; " + l)
+        out.write(";\n")
+        out.write("; Note that the output of `align_detector` is not compatible with `indexamajig` from CrystFEL 0.10.\n")
+        out.write("; To convert a geometry file in the >= 0.11 format for use in CrystFEL 0.10, modify as follows.\n")
+        out.write("; - comment out `group_*` definitions\n")
+        out.write("; - change `mask0_data` to `mask`\n")
+        out.write("; - change `mask0_file` to `mask_file`\n")
+        out.write("; - change `mask0_goodbits` to `mask_good`\n")
+        out.write("; - change `mask0_badbits` to `mask_bad`\n")
+        out.write("; - (for `geoptimiser`) restore `rigid_group` definitions (see above)\n")
         out.write("\n")
         out.write("clen = %.4f    ; %.1f mm camera length. You SHOULD optimize this!\n" % (clen * 1E-3, clen))
         out.write("res = %.1f     ; = 1 m / %.4f micron (binning %d) \n" % (1E6 / pixel_size, pixel_size, binning))

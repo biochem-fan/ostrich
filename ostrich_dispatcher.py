@@ -3,13 +3,11 @@
 #
 # Although Cheetah dispatcher is licensed under GPL,
 # I being the sole author, I am free to change the license.
-
-# This script must be edited for your environment,
-# especially (1) values quoted by @@ and (2) job submission commands.
-# At SACLA, the configured script is installed.
-
+#
 # If you have font problems with cctbx.python,
 # try "export PHENIX_GUI_ENVIRONMENT=1"
+#
+# TODO: repair annoying crash dump when closing the window
 
 import glob
 import os
@@ -26,11 +24,11 @@ import wx
 import wx.grid
 import wx.lib.newevent
 
-VERSION = "250412"
+VERSION = "251030"
 NPROC = 16
 SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-23-0/dials_env.sh"
 OSTRICH_PATH = "~sacla_sfx_app/packages/ostrich"
-CRYSTFEL_PATH = "~sacla_sfx_app/packages/crystfel-0.10.2/build"
+CRYSTFEL_PATH = "~sacla_sfx_app/packages/crystfel-0.12.0/build"
 
 re_filename = re.compile("^[0-9]+(-dark[0-9]?|-light|-\d)?$")
 re_status = re.compile("^Status:")
@@ -55,11 +53,18 @@ hostname > job.host
 {setup_script}
 ShowRunInfo -b {beamline} -r {runid} > run.info
 
+echo "----- OSTRICH STARTS NOW -----" >> ostrich.log
+echo >> ostrich.log
+
 TIME_START=`date +%s`
 dials.python {ostrich_path}/main.py runid={runid} bl={beamline} status=status.txt \\
    runtype={runtype} nproc={nproc} nblock={nblock} clen={clen} \\
-   {arguments} 2>&1 >> ostrich.log
+   {arguments} >> ostrich.log 2>&1
 TIME_OSTRICH=`date +%s`
+
+echo >> ostrich.log
+echo "----- OSTRICH ENDED; CRYSTFEL STARTS NOW -----" >> ostrich.log
+echo >> ostrich.log
 
 # --xgandalf-sampling-pitch=2 --xgandalf-grad-desc-iterations=3 is equivalent to --xgandalf-fast-execution
 # but setting in this way allows one to "disable" it in crystfel.args by overriding by the default
@@ -69,13 +74,15 @@ TIME_OSTRICH=`date +%s`
 {crystfel_path}/indexamajig -g {runid}.geom -o {runname}.stream -j {nproc} -i - \\
    --indexing=xgandalf --xgandalf-sampling-pitch=2 --xgandalf-grad-desc-iterations=3 \\
    --peaks=peakfinder8 --threshold=100 --min-snr=5 --min-pix-count=2 --local-bg-radius=3 --max-res 3000 --int-radius=3,4,7 \\
-   {crystfel_args} <<EOF
+   {crystfel_args} <<EOF >> ostrich.log 2>&1
 run{runname}.h5
 EOF
 rm -fr indexamajig.*
 grep Cell {runname}.stream | wc -l > indexed.cnt
 TIME_CRYSTFEL=`date +%s`
 
+echo "----- CRYSTFEL ENDED -----" >> ostrich.log
+echo >> ostrich.log
 echo "TIME_FOR_OSTRICH: "`echo $TIME_OSTRICH - $TIME_START | bc` >> ostrich.log
 echo "TIME_FOR_CRYSTFEL: "`echo $TIME_CRYSTFEL - $TIME_OSTRICH | bc` >> ostrich.log
 rm job.id job.host
