@@ -6,8 +6,6 @@
 #
 # If you have font problems with cctbx.python,
 # try "export PHENIX_GUI_ENVIRONMENT=1"
-#
-# TODO: repair annoying crash dump when closing the window
 
 import glob
 import os
@@ -24,7 +22,7 @@ import wx
 import wx.grid
 import wx.lib.newevent
 
-VERSION = "251030"
+VERSION = "251031"
 NPROC = 16
 SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-23-0/dials_env.sh"
 OSTRICH_PATH = "~sacla_sfx_app/packages/ostrich"
@@ -270,8 +268,11 @@ class MainWindow(wx.Frame):
         attr = wx.grid.GridCellAttr()
         attr.SetRenderer(ProgressCellRenderer())
         self.table.SetColAttr(MainWindow.COL_PROCESSED, attr)
+        attr.IncRef() # See https://github.com/wxWidgets/Phoenix/issues/994 for why this is needed
         self.table.SetColAttr(MainWindow.COL_HITS, attr)
+        attr.IncRef()
         self.table.SetColAttr(MainWindow.COL_INDEXED, attr)
+        attr.IncRef()
         for i in range(7):
             self.table.AutoSizeColLabelSize(i)
         self.table.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK, self.OnGridRightClick)
