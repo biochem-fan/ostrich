@@ -22,7 +22,7 @@ import wx
 import wx.grid
 import wx.lib.newevent
 
-VERSION = "251031"
+VERSION = "251104"
 NPROC = 16
 SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-23-0/dials_env.sh"
 OSTRICH_PATH = "~sacla_sfx_app/packages/ostrich"
@@ -69,7 +69,7 @@ echo >> ostrich.log
 # --xgandalf-sampling-pitch=6 --xgandalf-grad-desc-iterations=4.
 # NOTE: --threshold depends on adu_per_photon
 # WARNING: --max-res is 1200 px by default as of CrystFEL 0.11, which is too small for CITIUS
-{crystfel_path}/indexamajig -g {runid}.geom -o {runname}.stream -j {nproc} -i - \\
+{crystfel_path}/indexamajig -g {runid}.geom -o {runname}.stream -j {nproc} -i - --copy-header=/entry/data/tag_id \\
    --indexing=xgandalf --xgandalf-sampling-pitch=2 --xgandalf-grad-desc-iterations=3 \\
    --peaks=peakfinder8 --threshold=100 --min-snr=5 --min-pix-count=2 --local-bg-radius=3 --max-res 3000 --int-radius=3,4,7 \\
    {crystfel_args} <<EOF >> ostrich.log 2>&1
