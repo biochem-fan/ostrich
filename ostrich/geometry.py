@@ -79,8 +79,8 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
         out.write("; Thus, sensor border masks are defined as rectangles in this geometry file as well.\n")
         out.write(";   A mask name `bad{SENSOR_NAME}{l/s}{1/2}` means the border mask for the sensor SENSOR_NAME,\n")
         out.write(";   along the long axis (l) or the short axis (s). The last digit (1 or 2) specifies the side.\n")
-        out.write(";   Bad regions near outer edges of each sensor (s2) are wider due to amplifier shield shadows.\n")
-        out.write(";   The width of the shadow depends on the camera length. You might want to optimize it by\n")
+        out.write(";   In MPCCDs, bad regions near outer edges of each sensor (s2) are wider due to amplifier\n")
+        out.write(";   shield shadows, whose width depends on the camera length. You might want to optimize it by\n")
         out.write(";   tweaking `min_ss`. The ranges are 0-indexed and inclusive in CrystFEL.\n")
         out.write("; Depending on the detector, additional masks for damaged areas are also defined.\n")
         out.write(";\n")
@@ -168,43 +168,38 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
             out.write("%s/corner_y = %f\n" % (name, (dety + 1000 * beam_center[1]) / pixel_size)) # px
             out.write("%s/coffset = %f\n\n" % (name, -detz * 1E-6)) # m
 
-        border, outer_border = get_border(geometry.name)
-        border = int(np.ceil(border / binning))
-        outer_border = int(np.ceil(outer_border / binning))
-        if border != 0:
-            out.write("; Bad regions near edges of each sensor.\n")
-            out.write(";  l: long axis, s: short axis\n")
-            out.write("; NOTE: ranges are 0-indexed and inclusive in CrystFEL\n")
+        borders = get_border(geometry.name)
+        l1, l2, s1, s2 = [int(np.ceil(x / binning)) for x in borders]
+        out.write("; Bad regions near edges of each sensor.\n")
+        out.write(";  l: long (slow) axis, s: short (fast) axis\n")
+        out.write("; In MPCCD, outer edges (s2) of each sensor are shadowed by amplifier shields;\n")
+        out.write("; you might want to optimize these widths (edit min_ss).\n")
+        out.write("; NOTE: ranges are 0-indexed and inclusive in CrystFEL\n")
 
-            for i, panel in enumerate(geometry.panels):
-                name = panel.name
+        for i, panel in enumerate(geometry.panels):
+            name = panel.name
+            if l1 != 0:
                 out.write("bad%sl1/min_fs = %d\n"    % (name, 0))
-                out.write("bad%sl1/max_fs = %d\n"    % (name, border - 1))
+                out.write("bad%sl1/max_fs = %d\n"    % (name, l1 - 1))
                 out.write("bad%sl1/min_ss = %d\n"    % (name, ysize * i))
                 out.write("bad%sl1/max_ss = %d\n"    % (name, ysize * (i + 1) - 1))
                 out.write("bad%sl1/panel  = %s\n\n"  % (name, name))
-
-                out.write("bad%sl2/min_fs = %d\n"    % (name, xsize - border))
+            if l2 != 0:
+                out.write("bad%sl2/min_fs = %d\n"    % (name, xsize - l2))
                 out.write("bad%sl2/max_fs = %d\n"    % (name, xsize - 1))
                 out.write("bad%sl2/min_ss = %d\n"    % (name, ysize * i))
                 out.write("bad%sl2/max_ss = %d\n"    % (name, ysize * (i + 1) - 1))
                 out.write("bad%sl2/panel  = %s\n\n"  % (name, name))
-
+            if s1 != 0:
                 out.write("bad%ss1/min_fs = %d\n"    % (name, 0))
                 out.write("bad%ss1/max_fs = %d\n"    % (name, xsize - 1))
                 out.write("bad%ss1/min_ss = %d\n"    % (name, ysize * i))
-                out.write("bad%ss1/max_ss = %d\n"    % (name, ysize * i + border - 1))
+                out.write("bad%ss1/max_ss = %d\n"    % (name, ysize * i + s1 - 1))
                 out.write("bad%ss1/panel  = %s\n\n"  % (name, name))
-
-        if outer_border != 0:
-            out.write("; Bad regions near outer edges of each sensor due to amplifier shields;\n")
-            out.write("; you might want to optimize these widths (edit min_ss).\n")
-
-            for i, panel in enumerate(geometry.panels):
-                name = panel.name
+            if s2 != 0: # amplifier shield in MPCCD
                 out.write("bad%ss2/min_fs = %d\n"    % (name, 0))
                 out.write("bad%ss2/max_fs = %d\n"    % (name, xsize - 1))
-                out.write("bad%ss2/min_ss = %d\n"    % (name, ysize * (i + 1) - outer_border))
+                out.write("bad%ss2/min_ss = %d\n"    % (name, ysize * (i + 1) - s2))
                 out.write("bad%ss2/max_ss = %d\n"    % (name, ysize * (i + 1) - 1))
                 out.write("bad%ss2/panel  = %s\n\n"  % (name, name))
 
@@ -262,32 +257,32 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
                 out.write("badq3port1/max_ss = 3071\n")
                 out.write("badq3port1/panel  = q3\n\n")
 
-# Returns (border, outer_border)
-# outer_border is along the fast edge at the largest slow values
+# Returns border widths for (l1, l2, s1, s2).
+# l1 means along the long (slow) edge with small fast address.
 def get_border(det_name):
     if   re.match("MPCCD-8B0-2-010", det_name): # New Phase 3 detector
-        return (5, 32) # based on 25May-Umena (234606) @ 8.5keV
+        return (5, 5, 5, 32) # based on 25May-Umena (234606) @ 8.5keV
     elif re.match("MPCCD-8B0-2-008", det_name): # New Phase 3 detector
-        return (5, 30) # based on 24Feb-Shimada @ 10keV
+        return (5, 5, 5, 30) # based on 24Feb-Shimada @ 10keV
     elif re.match("MPCCD-8B0-2-007", det_name): # New Phase 3 detector
-        return (5, 33) # based on 22Nov-Iwata @ 10keV
+        return (5, 5, 5, 33) # based on 22Nov-Iwata @ 10keV
     elif re.match("MPCCD-8B0-2-006", det_name): # New Phase 3 detector
-        return (5, 30) # based on 20Feb-Ueno @ 10keV
+        return (5, 5, 5, 30) # based on 20Feb-Ueno @ 10keV
     elif re.match("MPCCD-8B0-2-005", det_name): # New Phase 3 detector
         # I wasn't aware of this detector until its retirement on 22Nov and
         # used to manually modify the geometry every beam time.
         # This line was introduced on 22Nov, just in case someone reprocesses old data.
-        return (5, 35) # based on 22Oct-Ueno @ 10keV
+        return (5, 5, 5, 35) # based on 22Oct-Ueno @ 10keV
     elif re.match("MPCCD-8B", det_name): # Other Phase 3 detector
-        return (5, 23) # based on 17Jul-P3Lys @ 10 keV
+        return (5, 5, 5, 23) # based on 17Jul-P3Lys @ 10 keV
     elif re.match("MPCCD-8N", det_name): # Compact detector with amp shields
-        return (0, 22) # based on 17Jul-Kuma @ 7 keV
+        return (0, 0, 0, 22) # based on 17Jul-Kuma @ 7 keV
     elif re.match("CITIUS-20.2M", det_name): # based on 2024-Jul-12, 180 mm
-        return (1, 14)
-    elif re.match("CITIUS-2.2M", det_name): 
-        return (1, 14)
+        return (1, 1, 1, 14)
+    elif re.match("CITIUS-2.2M", det_name): # 2025-Nov-20, according to Dr. Nishino
+        return (5, 5, 1, 5)
     else:
-        return (5, 30) # default assumes New Phase 3 detector
+        return (5, 5, 5, 30) # default assumes New Phase 3 detector
 
 # bad_mask is (npanels * height, width), 1 is bad.
 def make_pixelmask(geometry, bl, runid, bad_mask=None, binning=1):
@@ -305,9 +300,8 @@ def make_pixelmask(geometry, bl, runid, bad_mask=None, binning=1):
         if binning != 1:
             bad_mask = bin_image(bad_mask, binning)
 
-    border, outer_border = get_border(geometry.name)
-    border = int(np.ceil(border / binning))
-    outer_border = int(np.ceil(outer_border / binning))
+    borders = get_border(geometry.name) 
+    l1, l2, s1, s2 = [int(np.ceil(x / binning)) for x in borders]
 
     # NeXus bit masks
     GAP = 1 # bit 0
@@ -317,15 +311,16 @@ def make_pixelmask(geometry, bl, runid, bad_mask=None, binning=1):
     NOISY = 16 # bit 4
 
     mask = np.zeros((ysize * npanels, xsize), dtype=np.uint32)
-    if bad_mask is not None: # merge API-provided mask (if present)
+    if bad_mask is not None:
         mask[bad_mask > 0] = NOISY
+        return mask # TODO: decide know whether I should merge the API mask with own mask
 
-    mask[:, 0:border] = NOISY
-    mask[:, (xsize - border):xsize] = NOISY
+    mask[:, 0:l1] = NOISY
+    mask[:, (xsize - l2):xsize] = NOISY
 
     for i in range(npanels):
-        mask[(ysize * i):(ysize * i + border), :] = NOISY
-        mask[(ysize * (i + 1) - outer_border):(ysize * (i + 1)), :] = COLD
+        mask[(ysize * i):(ysize * i + s1), :] = NOISY
+        mask[(ysize * (i + 1) - s2):(ysize * (i + 1)), :] = COLD
 
     if re.match("MPCCD-8B0-2-003", geometry.name): # Severly damaged Phase 3 detector
         assert binning == 1

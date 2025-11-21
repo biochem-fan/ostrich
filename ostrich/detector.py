@@ -57,7 +57,7 @@ class Detector:
     def allocate_readers(self):
         raise NotImplementedError
 
-    # this is a static method
+    @staticmethod
     def validate_and_set_geometry(det_infos):
         raise NotImplementedError
 
@@ -216,6 +216,7 @@ class MPCCDDetector(Detector):
         if self.geometry is None:
             self.read_detinfos()
 
+    @staticmethod
     def validate_and_set_geometry(det_infos):
         geometry = DetectorGeometry()
 
