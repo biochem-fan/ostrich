@@ -30,9 +30,12 @@ def run(params):
     framebuffer_size = params.framebuffer_size
     citius_roi = params.hitfinding_roi
 
+    print("ctdapy_xfel version:", ctolpy_xfel.get_api_version())
+
     # Get Run info
     runid = dbpy.read_runnumber_newest(bl)
-    #runid = 216241 # debug using simulator
+    #runid = 216241 # debug using simulator (20.2 M)
+    #runid = 264585 # debug using simulator (2.2M)
     if photon_energy == libtbx.Auto:
         comment = dbpy.read_comment(bl, runid)
         photon_energy = 1000.0 * dbpy.read_config_photonenergy(bl, runid)
@@ -81,18 +84,33 @@ def run(params):
         for panel in detector.geometry.panels:
             panel.gain = 1.0
 
-    adu_per_photon = 10 # dummy value for geometry output (debug use only)
-    # Write metadata
-    pixel_mask = make_pixelmask(detector.geometry, bl, runid, binning=1)
-    binned_pixel_mask = make_pixelmask(detector.geometry, bl, runid, binning)
+    # Prepare pixel mask (with bad pixel masks from API for CITIUS)
+    # Unlike the offline API, the online API requires a 3D output array because it works
+    # on multiple sensors in one go.
+    bad_mask = np.zeros((len(det_ids), detector.geometry.height, detector.geometry.width), dtype=np.uint8)
+    try:
+        ctrl_buf.read_badpixel_mask(bad_mask, det_ids)
+        for i, det_id in enumerate(det_ids):
+            print("The number of bad pixels on sensor %d from API: %d" % (det_id, np.sum(bad_mask[i, :, :])))
+    except:
+        print("This is CITIUS but bad pixel masks are unavailable from API")
+        bad_mask = None
 
-    output_filename = "online-debug.h5"
-    # TODO: binning is set to 1 because detector.geometry is already binned! This is irrelevant for NeXuS
-    # write_crystfel_geom("online.geom", True, detector.geometry, photon_energy, adu_per_photon, clen, bl, runid, beam_center, 1)
-    # write_nexus(output_filename, detector.geometry, bl, runid, "Online Debug", start_time, end_time, clen, adu_per_photon, binned_pixel_mask, beam_center, binning)
+    bad_mask = bad_mask.reshape((-1, detector.geometry.width))
+    pixel_mask = make_pixelmask(detector.geometry, bl, runid, binning=1)
+
+    # Write metadata for debugging
+    if False:
+        binned_pixel_mask = make_pixelmask(detector.geometry, bl, runid, binning=binning)
+        adu_per_photon = 10 # dummy value for geometry output (debug use only)
+
+        output_filename = "online-debug.h5"
+        # TODO: binning is set to 1 because detector.geometry is already binned! This is irrelevant for NeXuS
+        write_crystfel_geom("online.geom", True, detector.geometry, photon_energy, adu_per_photon, clen, bl, runid, beam_center, 1)
+        write_nexus(output_filename, detector.geometry, bl, runid, "Online Debug", start_time, end_time, clen, adu_per_photon, binned_pixel_mask, beam_center, binning)
     print()
 
-    # Make a boolean mask for DIALS hit finder. Note that hit finder uses non-binned images.
+    # Make a boolean mask for DIALS hit finder.
     pixel_mask = np.split(pixel_mask == 0, len(detector.geometry.panels), axis=0)
 
     find_hits(detector, shared_buffer, photon_energy, pixel_mask, params)
@@ -166,7 +184,7 @@ if __name__ == "__main__":
         print("Option: photon_energy     = %.1f eV" % params.photon_energy)
     print("Option: clen              = %.1f mm" % params.clen)
     print("Option: framebuffer_size  = %d" % params.framebuffer_size)
-    print("Option: nproc_hihtfinder  = %d" % params.nproc_hitfinder)
+    print("Option: nproc_hitfinder  = %d" % params.nproc_hitfinder)
     print("Option: nproc_reader      = %d" % params.nproc_reader)
     print("Option: hitfinding_roi    = %s" % params.hitfinding_roi)
     print()

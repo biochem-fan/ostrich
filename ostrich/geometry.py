@@ -10,6 +10,7 @@ import numpy as np
 import re
 
 from ostrich import VERSION
+from ostrich.detector import bin_image
 
 # NeXus McStats:
 #  Z along the beam, towards the detector
@@ -300,9 +301,6 @@ def make_pixelmask(geometry, bl, runid, bad_mask=None, binning=1):
         if binning != 1:
             bad_mask = bin_image(bad_mask, binning)
 
-    borders = get_border(geometry.name) 
-    l1, l2, s1, s2 = [int(np.ceil(x / binning)) for x in borders]
-
     # NeXus bit masks
     GAP = 1 # bit 0
     DEAD = 2 # bit 1
@@ -313,7 +311,10 @@ def make_pixelmask(geometry, bl, runid, bad_mask=None, binning=1):
     mask = np.zeros((ysize * npanels, xsize), dtype=np.uint32)
     if bad_mask is not None:
         mask[bad_mask > 0] = NOISY
-        return mask # TODO: decide know whether I should merge the API mask with own mask
+        return mask # TODO: decide whether I should merge the API mask with own mask
+
+    borders = get_border(geometry.name) 
+    l1, l2, s1, s2 = [int(np.ceil(x / binning)) for x in borders]
 
     mask[:, 0:l1] = NOISY
     mask[:, (xsize - l2):xsize] = NOISY

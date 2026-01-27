@@ -216,7 +216,7 @@ def run(params):
         try:
             for i, det_id in enumerate(det_ids):
                 ctrl_buf.read_badpixel_mask(bad_mask[(ysize * i):(ysize * (i + 1)),:], det_id)
-            print("The number of bad pixels from API: %d" % np.sum(bad_mask))
+            print("The total number of bad pixels from API: %d" % np.sum(bad_mask))
         except:
             print("This is CITIUS but bad pixel masks are unavailable from API")
             bad_mask = None
