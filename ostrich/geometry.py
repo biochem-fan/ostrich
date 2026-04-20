@@ -208,7 +208,7 @@ def write_crystfel_geom(filename, use_nexus, geometry, energy, adu_per_photon, c
         if re.match("MPCCD-8B0-2-003", geometry.panels[0].long_name):
             assert binning == 1
 
-            out.write("; Severly damaged Phase 3 detector\n")
+            out.write("; Severely damaged Phase 3 detector\n")
             out.write("baddamage1/min_fs = 501\n")
             out.write("baddamage1/max_fs = 511\n")
             out.write("baddamage1/min_ss = 1024\n")

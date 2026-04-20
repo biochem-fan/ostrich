@@ -1,4 +1,4 @@
-# Ostrich for SACLA SFX data proprocessing
+# Ostrich for SACLA SFX data preprocessing
 # written by Takanori Nakane at Osaka University
 
 from multiprocessing import Process, Queue

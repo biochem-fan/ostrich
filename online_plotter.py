@@ -151,7 +151,7 @@ class PlotWindow(wx.Frame):
                     break
 
 print()
-print("Cheetah Online plotter version 2026/04/20")
+print("OSTRICH Online plotter version 2026/04/20")
 print("   by Takanori Nakane")
 print()
 

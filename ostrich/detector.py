@@ -106,7 +106,7 @@ class CITIUSDetector(Detector):
                                  55, 56, 57, 58,
                                      62, 63])
         else:
-             raise ValueError("CITIUIS ROI type must be one of all, 24, 40, 48")
+             raise ValueError("CITIUS ROI type must be one of all, 24, 40, 48")
 
         return [x for x in det_ids if x in within_roi]
 

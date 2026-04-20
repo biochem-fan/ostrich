@@ -293,15 +293,15 @@ clen = 50.0
  .type = float(value_min = 0)
 
 pd1_threshold = 0
- .help = Threshold for photodiode 1 (pd1_name) for light. Set 0 to ignore this photodide.
+ .help = Threshold for photodiode 1 (pd1_name) for light. Set 0 to ignore this photodiode.
  .type = float
 
 pd2_threshold = 0
- .help = Threshold for photodiode 2 (pd1_name2) for light. Set 0 to ignore this photodide.
+ .help = Threshold for photodiode 2 (pd2_name) for light. Set 0 to ignore this photodiode.
  .type = float
 
 pd3_threshold = 0
- .help = Threshold for photodiode 3 (pd1_name3) for light. Set 0 to ignore this photodide.
+ .help = Threshold for photodiode 3 (pd3_name) for light. Set 0 to ignore this photodiode.
  .type = float
 
 pd1_name = "xfel_bl_2_st_3_pd_user_10_fitting_peak/voltage"

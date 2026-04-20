@@ -205,7 +205,7 @@ class AutoQsub(threading.Thread):
                     self.cv.release()
 
                     if os.path.exists(dir + "/job.id"):
-                        print("WARNING: Another instance of auto_qsub is runnning?")
+                        print("WARNING: Another instance of auto_qsub is running?")
                         break
                     print("Unsubmitted job found in " + dir)
                     njobs = int(subprocess.getoutput("qstat -w -u $USER | grep -c %s" % self.queue))
@@ -558,7 +558,7 @@ class MainWindow(wx.Frame):
                 raise
         except:
             print(traceback.format_exc())
-            self.showError("Invalid run ID or paramters were specified.")
+            self.showError("Invalid run ID or parameters were specified.")
             return
 
         for runid in runids:

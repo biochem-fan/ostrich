@@ -32,7 +32,7 @@ def is_exposed(high_tag, tags, bl, runid):
         sensor_shutter_open = "xfel_bl_3_shutter_1_open_valid/status"
         sensor_shutter_close = "xfel_bl_3_shutter_1_close_valid/status"
     else:
-        RuntimeError("BadBeamline")
+        raise RuntimeError("BadBeamline")
 
     if (bl == 2 and runid >= 81550) or (bl == 3 and runid >= 909709):
         # Current strategy from 2020 Jan (run 81550-): look at both open and close status.
@@ -104,7 +104,7 @@ def get_photon_energies(bl, runid, high_tag, tags):
         if energy is not None and energy > 0:
             pulse_energies.append(energy * 1000.0)
         else:
-            print("WARNING: The wavelength from the inline spectrometer does not look sensible for tag %d." % tag)
+            print("WARNING: The wavelength (energy) from the inline spectrometer does not look sensible for tag %d." % tag)
             if config_photon_energy_sensible:
                 pulse_energies.append(config_photon_energy)
                 print("         Used the accelerator config value instead.")

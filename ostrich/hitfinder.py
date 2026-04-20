@@ -249,7 +249,7 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
             n_hit += 1
 
         if n_processed % 10 == 0:
-             update_status(status, "Total=%d,Processed=%d,Hits=%ld,Status=Hitfinding" % (len(tags), n_processed, n_hit))
+             update_status(status, "Total=%d,Processed=%d,Hits=%d,Status=Hitfinding" % (len(tags), n_processed, n_hit))
         print("%4d / %4d processed, %4d hits, current tag = %d with %d spot(s)" % (n_processed, len(tags), n_hit, tag, n_spots))
 
     if use_nexus:
