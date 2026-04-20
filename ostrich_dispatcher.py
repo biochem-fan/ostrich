@@ -22,13 +22,13 @@ import wx
 import wx.grid
 import wx.lib.newevent
 
-VERSION = "251104"
+VERSION = "260417"
 NPROC = 16
-SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-23-0/dials_env.sh"
+SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-27-1/dials_env.sh"
 OSTRICH_PATH = "~sacla_sfx_app/packages/ostrich"
 CRYSTFEL_PATH = "~sacla_sfx_app/packages/crystfel-0.12.0/build"
 
-re_filename = re.compile("^[0-9]+(-dark[0-9]?|-light|-\d)?$")
+re_filename = re.compile(r"^[0-9]+(-dark[0-9]?|-light|-\d)?$")
 re_status = re.compile("^Status:")
 (ThreadEvent, EVT_THREAD) = wx.lib.newevent.NewEvent()
 

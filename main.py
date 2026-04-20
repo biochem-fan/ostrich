@@ -6,7 +6,7 @@
 import datetime
 import h5py
 import libtbx
-from multiprocessing import set_start_method, freeze_support
+from multiprocessing import set_start_method, freeze_support, set_forkserver_preload
 import numpy as np
 import os.path
 import re
@@ -152,7 +152,7 @@ def run(params):
 
     if params.adu_per_photon == libtbx.Auto:
         if is_citius:
-            params.adu_per_photon = 4
+            params.adu_per_photon = 8
         else:
             params.adu_per_photon = 10
     adu_per_photon = params.adu_per_photon
@@ -341,7 +341,7 @@ compression_level = 6
  .type = int(value_min = 0, value_max = 9)
 
 adu_per_photon = Auto
- .help = Output value per photon. Auto means 10 for MPCCD, 4 for CITIUS.
+ .help = Output value per photon. Auto means 10 for MPCCD, 8 for CITIUS.
  .type = float(value_min=0.1, value_max = 100)
 
 output_dtype = Auto
@@ -374,10 +374,17 @@ output {
 include scope dials.algorithms.spot_finding.factory.phil_scope
 '''
 
+# Users can override these defaults by adding more options
 default_override_phil = '''
 spotfinder {
     filter {
-#        border= 4
+#        border = 4
+    }
+    background {
+        dispersion {
+# global_threshold is after gain correction, i.e., number of photons
+            global_threshold = 10
+        }
     }
 }
 '''
@@ -386,8 +393,15 @@ if __name__ == "__main__":
     # Very annoyingly, stpy is not compatible with fork.
     # Internally, it never releases sockets to MySQL DAQ DB.
     # BufferReaders shares file handles.
+    # forkserver starts a vanilla parent that imports
+    # only those set at `set_forkserver_preload`.
+    # Thus, it is faster than `spawn` and safer than `fork`.
+
+    # Python 3.13 (in DIALS 3.27.1) requires this order!
+    # https://github.com/python/cpython/issues/140814
+    set_start_method("forkserver")
     freeze_support()
-    set_start_method("spawn")
+    set_forkserver_preload(['dials.array_family.flex'])
 
     # Importing these at the top makes spawning much slower
     from dials.util.options import ArgumentParser
