@@ -151,7 +151,7 @@ class PlotWindow(wx.Frame):
                     break
 
 print()
-print("Cheetah Online plotter version 2025/03/17")
+print("Cheetah Online plotter version 2026/04/20")
 print("   by Takanori Nakane")
 print()
 
@@ -162,8 +162,8 @@ parser.add_option("--filename", dest="filename", type=str, default=None, help="f
 #parser.add_option("--saturation", dest="saturation", type=int, default=15000, help="saturation threshold")
 opts, args = parser.parse_args()
 
-print("Option: window = %d" % opts.threshold)
-print("Option: threshold = %d" % opts.window)
+print("Option: window = %d" % opts.window)
+print("Option: threshold = %d" % opts.threshold)
 print("Option: filename = %s" % opts.filename)
 #print("Option: saturation = %d" % opts.saturation)
 

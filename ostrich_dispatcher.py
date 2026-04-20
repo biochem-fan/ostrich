@@ -101,7 +101,7 @@ class LogWatcher(threading.Thread):
             self.start()
         except: # To avoid "too many theads" error
             time.sleep(1) # wait "Finished" threads to be stopped
-            self.start
+            self.start()
 
     def stop(self):
         self.running = False

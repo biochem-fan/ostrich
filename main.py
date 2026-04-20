@@ -33,7 +33,7 @@ def classify_frames(params, high_tag, tags):
         if params.pd2_threshold != 0:
             pd2_values = syncdata2float(params.pd2_name, high_tag, tags)
         if params.pd3_threshold != 0:
-            pd3_values = syncdata2float(params.pd2_name, high_tag, tags)
+            pd3_values = syncdata2float(params.pd3_name, high_tag, tags)
 
         nframe_after_light = 0
         for i, tag in enumerate(tags):
@@ -73,7 +73,7 @@ def runtype_to_num(runtype):
             return int(runtype[4:])
         else:
             return int(runtype)
-    except e:
+    except ValueError:
         raise ValueError("runtype must be 0, 1, 2, ... or light or dark1, dark2, ...")
 
 def run(params):
@@ -204,7 +204,7 @@ def run(params):
         # Take care when using the radial profile and/or resolution filters.
         beam_center = (165.6, 206.9) # x, y in mm, NeXus-McStats system
     else:
-        beam_center = (0.0, 0,0)
+        beam_center = (0.0, 0.0)
 
     write_crystfel_geom("%d.geom" % runid, use_nexus, detector.geometry, mean_energy, adu_per_photon, clen, bl, runid, beam_center, binning)
 
@@ -428,7 +428,7 @@ if __name__ == "__main__":
     print("Option: status            = %s" % params.status)
     print("Option: compression_level = %d" % params.compression_level)
     if params.adu_per_photon == libtbx.Auto:
-        print("Option: adu_per_photon    = Auto (10 for MPCCD, 4 for CITIUS)")
+        print("Option: adu_per_photon    = Auto (10 for MPCCD, 8 for CITIUS)")
     else:
         print("Option: adu_per_photon    = %.1f / photon" % params.adu_per_photon)
     if params.output_dtype == libtbx.Auto:
