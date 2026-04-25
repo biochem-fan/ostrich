@@ -9,7 +9,7 @@ def str2float(str):
     if str == "not-converged": return float("nan")
     if str == "saturated": return float("inf")
 
-    m = re.match("-?\d+(.\d+)?(e[+-]?\d+)?", str)
+    m = re.match(r"-?\d+(.\d+)?(e[+-]?\d+)?", str)
     if m is not None:
         return float(m.group(0))
     else:
