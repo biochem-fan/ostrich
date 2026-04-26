@@ -76,6 +76,11 @@ echo >> ostrich.log
 run{runname}.h5
 EOF
 rm -fr indexamajig.*
+
+# CrystFEL 0.12.0 creates unwanted mille-data.bin even without --mille
+# https://github.com/taw10/crystfel/issues/23
+rm -fr mille-data.bin
+
 grep Cell {runname}.stream | wc -l > indexed.cnt
 TIME_CRYSTFEL=`date +%s`
 
