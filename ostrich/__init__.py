@@ -1,4 +1,4 @@
-VERSION = 260425
+VERSION = 260426
 OSTRICH_ONLINE_SHM_NAME = "online_ostrich"
 
 def update_status(filename, message):

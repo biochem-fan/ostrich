@@ -57,8 +57,12 @@ def queue_based_worker(read_queue, result_queue, chunksize, detector, output_dty
         tag, pulse_energy = task
 
         if not is_citius:
-            for reader, buf in zip(detector.readers, detector.buffers):
-                reader.collect(buf, tag)
+            try:
+                for reader, buf in zip(detector.readers, detector.buffers):
+                    reader.collect(buf, tag)
+            except Exception as e:
+                result_queue.put([tag, -1, pulse_energy, repr(e)])
+                continue
 
             # We quantize such that one photon is adu_per_photon output
             #  (i.e. DIALS's gain = 1 / adu_per_photon by definition).
@@ -220,10 +224,13 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
             n_finished += 1
             continue
 
-        tag, n_spots, pulse_energy, image = task
+        tag, n_spots, pulse_energy, payload = task
         n_processed += 1
 
-        if image is not None:
+        if n_spots < 0: # Error
+            print("Failed to retrieve and skipped tag %d: %s" % (tag, payload))
+        elif n_spots >= 0 and payload is not None: # Hit
+            image = payload
             if use_nexus:
                 hit_ids.append(tag)
                 hit_energies.append(pulse_energy)
@@ -263,5 +270,5 @@ def find_hits(detector, tags, pulse_energies, output_filename, dark_average, pix
     [t.join() for t in workers]
     read_queue.close()
     result_queue.close()
-    print("%d Hit / %d Processed." % (n_hit, n_processed))
+    print("%d Hit / %d Processed (or skipped)." % (n_hit, n_processed))
     update_status(status, "Total=%d,Processed=%d,Hits=%ld,Status=Finished" % (len(tags), n_processed, n_hit))
