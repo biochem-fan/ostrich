@@ -6,7 +6,7 @@
 import datetime
 import h5py
 import libtbx
-from multiprocessing import set_start_method, freeze_support, shared_memory
+from multiprocessing import set_start_method, freeze_support, shared_memory, set_forkserver_preload
 import numpy as np
 import os.path
 import re
@@ -84,7 +84,7 @@ def run(params):
         for panel in detector.geometry.panels:
             panel.gain = 1.0
 
-    # Prepare pixel mask (with bad pixel masks from API for CITIUS)
+    # Prepare a pixel mask (with bad pixel masks from API for CITIUS)
     # Unlike the offline API, the online API requires a 3D output array because it works
     # on multiple sensors in one go.
     bad_mask = np.zeros((len(det_ids), detector.geometry.height, detector.geometry.width), dtype=np.uint8)
@@ -164,8 +164,9 @@ if __name__ == "__main__":
     # Very annoyingly, stpy is not compatible with fork.
     # Internally, it never releases sockets to MySQL DAQ DB.
     # BufferReaders shares file handles.
+    set_start_method("forkserver")
     freeze_support()
-    set_start_method("spawn")
+    set_forkserver_preload(['dials.array_family.flex'])
 
     # Importing these at the top makes spawning much slower
     from dials.util.options import ArgumentParser
