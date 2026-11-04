@@ -57,7 +57,6 @@ class PlotWindow(wx.Frame):
 
         # Parser internals
         self.frame_read_bytes = 0
-        self.peak_read_bytes = 0
         self.peak_cur_tag = -1
 
         self.ax.set_ylim([0,300])
@@ -70,7 +69,7 @@ class PlotWindow(wx.Frame):
 
         self.peakdots, = self.ax.plot(0, 0, color="r", marker="o", linestyle="None", markersize=3, markeredgewidth=0)
         self.hitline, = self.ax_hit.plot(0, 0, 'b-')
-        self.animator = manim.FuncAnimation(self.fig, self.anim, interval=3000) # 3 sec. cf. saveInterval in cheetah
+        self.animator = manim.FuncAnimation(self.fig, self.anim, interval=3000, cache_frame_data=False) # 3 sec.
 
         self.vsizer = wx.BoxSizer(wx.VERTICAL)
         self.vsizer.Add(self.canvas, 0, wx.EXPAND | wx.RIGHT | wx.TOP)
@@ -91,7 +90,6 @@ class PlotWindow(wx.Frame):
             new_filename = self.getLatest()
             if self.filename != new_filename:
                 self.frame_read_bytes = 0
-                self.peak_read_bytes = 0
                 self.filename = new_filename
                 
         self.SetTitle(self.filename)
@@ -126,12 +124,10 @@ class PlotWindow(wx.Frame):
             size = 0
         # This is necessary to limit latency on some file systems.
 
-        cnt = 0
         with open(filename, "r") as f:
             f.seek(self.frame_read_bytes)
 
             for line in f:
-                cnt += 1
                 self.frame_read_bytes += len(line)
                 
                 if line[0] == "#":
@@ -151,7 +147,7 @@ class PlotWindow(wx.Frame):
                     break
 
 print()
-print("OSTRICH Online plotter version 2026/04/20")
+print("OSTRICH Online plotter version 2026/11/04")
 print("   by Takanori Nakane")
 print()
 
