@@ -22,7 +22,7 @@ import wx
 import wx.grid
 import wx.lib.newevent
 
-VERSION = "260417"
+VERSION = "261104"
 NPROC = 16
 SETUP_SCRIPT = "source ~sacla_sfx_app/setup.sh; source ~sacla_sfx_app/packages/dials-v3-27-1/dials_env.sh"
 OSTRICH_PATH = "~sacla_sfx_app/packages/ostrich"
@@ -593,8 +593,11 @@ class MainWindow(wx.Frame):
             return
 
         # TODO: Provide CITIUS specific options
-        out = subprocess.Popen(["CITIUSShowRunStatus", "-b", "%d" % self.opts.bl, "-r", "%d" % self.waitFor], stdout=subprocess.PIPE).stdout.read().decode()
-        if out.find("CTDA_RUN_STATUS_NOT_CITIUS") != -1 or out.find("CTDA_RUN_STATUS_CAN_READ") != -1:
+        out = subprocess.Popen(["CITIUSShowRunStatus", "-b", "%d" % self.opts.bl, "-r", "%d" % self.waitFor],\
+                               stdout=subprocess.PIPE).stdout.read().decode()
+        # Runs with CTDA_RUN_STATUS_UNEXPECTED are submitted anyway to show error rows
+        if out.find("CTDA_RUN_STATUS_NOT_CITIUS") != -1 or \
+           out.find("CTDA_RUN_STATUS_CAN_READ") != -1 or out.find("CTDA_RUN_STATUS_UNEXPECTED") != -1:
                 print("\rRun %d became ready." % self.waitFor)
                 self.prepareSubmitJob("%d" % self.waitFor)
                 self.waitFor = self.waitFor + 1

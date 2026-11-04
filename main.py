@@ -138,6 +138,9 @@ def run(params):
     elif citius_status == ctdapy_xfel.CTDA_RUN_STATUS_WAIT_CALIB:
         update_status(status, "Status=Error-CITIUSNotYetReady")
         raise RuntimeError("Found a CITIUS detector but calibration is still underway. Please try again later.")
+    elif citius_status == ctdapy_xfel.CTDA_RUN_STATUS_UNEXPECTED:
+        update_status(status, "Status=Error-CITIUSUnExpected")
+        raise RuntimeError("Found a CITIUS detector but the status is CTDA_RUN_STATUS_UNEXPECTED. Please contact the detector team.")
     else:
         try:
             det_ids_all = dbpy.read_detidlist(bl, runid)
