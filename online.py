@@ -6,7 +6,7 @@
 import datetime
 import h5py
 import libtbx
-from multiprocessing import set_start_method, freeze_support, shared_memory, set_forkserver_preload
+from multiprocessing import set_start_method, freeze_support, shared_memory
 import numpy as np
 import os.path
 import re
@@ -164,9 +164,8 @@ if __name__ == "__main__":
     # Very annoyingly, stpy is not compatible with fork.
     # Internally, it never releases sockets to MySQL DAQ DB.
     # BufferReaders shares file handles.
-    set_start_method("forkserver")
     freeze_support()
-    set_forkserver_preload(['dials.array_family.flex'])
+    set_start_method("spawn")
 
     # Importing these at the top makes spawning much slower
     from dials.util.options import ArgumentParser
