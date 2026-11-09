@@ -11,6 +11,7 @@ import ctolpy_xfel
 from dxtbx.format.image import ImageBool
 from dxtbx.imageset import ImageSet, ImageSetData, MemReader
 from dxtbx.model.experiment_list import ExperimentListFactory
+import os
 from scitbx import matrix
 import time
 
@@ -18,6 +19,7 @@ from ostrich import OSTRICH_ONLINE_SHM_NAME
 from ostrich.detector import CITIUSDetector, MPCCDDetector, bin_image, SI_eV_per_ELECTRON
 
 FRAME_STEP = 2 # 30 FPS
+FLUSH_INTERVAL = 30 # images = 1 sec
 
 def image_reading_worker(worker_id, start_frame, read_queue, hitfinding_queue, detector, shared_buffer_shape, dtype, params):
     nproc_reader = params.nproc_reader
@@ -170,8 +172,9 @@ def find_hits(detector, shared_buffer, photon_energy, pixel_mask, params):
 
         print("%f: %4d processed, current tag = %d with %d spot(s)" % (time.time(), n_processed, cur_frame, n_spots))
         logfile.write("%d %d\n" % (cur_frame, n_spots))
-        if (n_processed % 30 == 0):
-            logfile.flush()
+        if (n_processed % FLUSH_INTERVAL == 0):
+            logfile.flush() # flush sends all writes to the kernel but does not guarantee actual writes.
+            os.fsync(logfile.fileno()) # this blocks until actual writes are completed.
         read_queue.put(slot)
 
     [t.join() for t in workers]

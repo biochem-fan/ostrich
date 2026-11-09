@@ -164,8 +164,8 @@ if __name__ == "__main__":
     # Very annoyingly, stpy is not compatible with fork.
     # Internally, it never releases sockets to MySQL DAQ DB.
     # BufferReaders shares file handles.
-    freeze_support()
     set_start_method("spawn")
+    freeze_support()
 
     # Importing these at the top makes spawning much slower
     from dials.util.options import ArgumentParser
